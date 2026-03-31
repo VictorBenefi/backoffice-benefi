@@ -30,9 +30,7 @@ export async function POST(req: Request) {
     const body = await req.json();
 
     const name = String(body.name || "").trim();
-    const email = String(body.email || "")
-      .trim()
-      .toLowerCase();
+    const email = String(body.email || "").trim().toLowerCase();
     const password = String(body.password || "");
     const role = String(body.role || "").trim();
 
@@ -99,11 +97,13 @@ export async function POST(req: Request) {
       );
     }
 
+    const authUserId = createdUser.user.id;
+
     const { error: insertError } = await supabaseAdmin
       .from("app_users")
       .insert([
         {
-          id: createdUser.user.id,
+          auth_user_id: authUserId,
           name,
           email,
           role,
@@ -113,7 +113,7 @@ export async function POST(req: Request) {
       ]);
 
     if (insertError) {
-      await supabaseAdmin.auth.admin.deleteUser(createdUser.user.id);
+      await supabaseAdmin.auth.admin.deleteUser(authUserId);
 
       return NextResponse.json(
         { error: insertError.message },
