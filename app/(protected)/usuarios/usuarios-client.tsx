@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 
 type AppUser = {
   id: string;
+  auth_user_id: string | null;
   name: string | null;
   email: string | null;
   role: string | null;
@@ -44,13 +46,13 @@ export default function UsuariosClient() {
       .order("name", { ascending: true });
 
     if (error) {
-      alert(`Error cargando usuarios: ${error.message}`);
+      toast.error(`Error cargando usuarios: ${error.message}`);
       setUsers([]);
       setLoading(false);
       return;
     }
 
-    setUsers(data || []);
+    setUsers((data as AppUser[]) || []);
     setLoading(false);
   }
 
@@ -65,10 +67,11 @@ export default function UsuariosClient() {
     setSavingId(null);
 
     if (error) {
-      alert(`Error actualizando rol: ${error.message}`);
+      toast.error(`Error actualizando rol: ${error.message}`);
       return;
     }
 
+    toast.success("Rol actualizado correctamente.");
     await fetchUsers();
   }
 
@@ -85,23 +88,28 @@ export default function UsuariosClient() {
     setSavingId(null);
 
     if (error) {
-      alert(`Error actualizando estado: ${error.message}`);
+      toast.error(`Error actualizando estado: ${error.message}`);
       return;
     }
 
+    toast.success(
+      nextValue ? "Usuario activado correctamente." : "Usuario inactivado correctamente."
+    );
     await fetchUsers();
   }
 
-  // 🔐 RESET PASSWORD
   async function resetPassword(user: AppUser) {
-    const newPassword = prompt(
-      `Ingresá nueva contraseña para ${user.email}`
-    );
+    const newPassword = prompt(`Ingresá nueva contraseña para ${user.email}`);
 
     if (!newPassword) return;
 
     if (newPassword.length < 6) {
-      alert("La contraseña debe tener al menos 6 caracteres.");
+      toast.warning("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+
+    if (!user.auth_user_id) {
+      toast.error("Este usuario no tiene vinculado el ID de autenticación.");
       return;
     }
 
@@ -112,22 +120,22 @@ export default function UsuariosClient() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId: user.id,
+          userId: user.auth_user_id,
           password: newPassword,
         }),
       });
 
-      const result = await response.json();
+      const result = await response.json().catch(() => null);
 
       if (!response.ok) {
-        alert(result.error || "No se pudo actualizar la contraseña.");
+        toast.error(result?.error || "No se pudo actualizar la contraseña.");
         return;
       }
 
-      alert("Contraseña actualizada correctamente.");
+      toast.success(result?.message || "Contraseña actualizada correctamente.");
     } catch (error) {
       console.error(error);
-      alert("Error al actualizar contraseña.");
+      toast.error("Error al actualizar contraseña.");
     }
   }
 
@@ -135,17 +143,22 @@ export default function UsuariosClient() {
     e.preventDefault();
 
     if (!formData.name.trim()) {
-      alert("Debés ingresar el nombre.");
+      toast.warning("Debés ingresar el nombre.");
       return;
     }
 
     if (!formData.email.trim()) {
-      alert("Debés ingresar el email.");
+      toast.warning("Debés ingresar el email.");
       return;
     }
 
     if (!formData.password.trim()) {
-      alert("Debés ingresar la contraseña inicial.");
+      toast.warning("Debés ingresar la contraseña inicial.");
+      return;
+    }
+
+    if (formData.password.trim().length < 6) {
+      toast.warning("La contraseña inicial debe tener al menos 6 caracteres.");
       return;
     }
 
@@ -165,21 +178,21 @@ export default function UsuariosClient() {
         }),
       });
 
-      const result = await response.json();
+      const result = await response.json().catch(() => null);
 
       if (!response.ok) {
-        alert(result.error || "No se pudo crear el usuario.");
+        toast.error(result?.error || "No se pudo crear el usuario.");
         setCreating(false);
         return;
       }
 
-      alert("Usuario creado correctamente.");
+      toast.success("Usuario creado correctamente.");
       setFormData(initialForm);
       setShowPassword(false);
       await fetchUsers();
     } catch (error) {
       console.error(error);
-      alert("Ocurrió un error al crear el usuario.");
+      toast.error("Ocurrió un error al crear el usuario.");
     } finally {
       setCreating(false);
     }
@@ -191,7 +204,6 @@ export default function UsuariosClient() {
     <div className="space-y-6">
       <h1 className="text-3xl font-bold">Usuarios y roles</h1>
 
-      {/* Alta de usuario */}
       <div className="bg-white rounded-2xl shadow-sm border p-6">
         <h2 className="text-xl font-semibold mb-4">Alta de usuario</h2>
 
@@ -222,7 +234,6 @@ export default function UsuariosClient() {
             />
           </div>
 
-          {/* CONTRASEÑA */}
           <div className="md:col-span-2">
             <label className="block text-sm mb-1">Contraseña inicial</label>
 
@@ -277,7 +288,6 @@ export default function UsuariosClient() {
         </form>
       </div>
 
-      {/* Lista de usuarios */}
       <div className="bg-white rounded-2xl shadow-sm border p-6">
         <h2 className="text-xl font-semibold mb-4">Usuarios existentes</h2>
 
