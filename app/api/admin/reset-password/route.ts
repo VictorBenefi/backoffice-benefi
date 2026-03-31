@@ -32,15 +32,31 @@ export async function POST(req: Request) {
       );
     }
 
-    const { error } = await supabaseAdmin.auth.admin.updateUserById(
+    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
       userId,
       { password: newPassword }
     );
 
-    if (error) {
+    if (authError) {
       return NextResponse.json(
-        { error: error.message },
+        { error: authError.message },
         { status: 400 }
+      );
+    }
+
+    const { error: appUserError } = await supabaseAdmin
+      .from("app_users")
+      .update({ must_change_password: false })
+      .eq("id", userId);
+
+    if (appUserError) {
+      return NextResponse.json(
+        {
+          error:
+            "La contraseña se actualizó, pero no se pudo actualizar el estado del usuario: " +
+            appUserError.message,
+        },
+        { status: 500 }
       );
     }
 
