@@ -6,7 +6,6 @@ import { createClient } from "@/lib/supabase/client";
 
 type AppUser = {
   id: string;
-  auth_user_id: string | null;
   name: string | null;
   email: string | null;
   role: string | null;
@@ -93,8 +92,11 @@ export default function UsuariosClient() {
     }
 
     toast.success(
-      nextValue ? "Usuario activado correctamente." : "Usuario inactivado correctamente."
+      nextValue
+        ? "Usuario activado correctamente."
+        : "Usuario inactivado correctamente."
     );
+
     await fetchUsers();
   }
 
@@ -108,11 +110,6 @@ export default function UsuariosClient() {
       return;
     }
 
-    if (!user.auth_user_id) {
-      toast.error("Este usuario no tiene vinculado el ID de autenticación.");
-      return;
-    }
-
     try {
       const response = await fetch("/api/admin/reset-password", {
         method: "POST",
@@ -120,7 +117,7 @@ export default function UsuariosClient() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId: user.auth_user_id,
+          userId: user.id,
           password: newPassword,
         }),
       });
