@@ -1,9 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 export default function CambiarClavePage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const userId = useMemo(() => searchParams.get("userId") || "", [searchParams]);
+
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -11,82 +17,100 @@ export default function CambiarClavePage() {
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!userId) {
+      toast.error("Falta el identificador del usuario.");
+      return;
+    }
+
     if (!password || !confirmPassword) {
-      toast.warning("Todos los campos son obligatorios");
+      toast.warning("Todos los campos son obligatorios.");
+      return;
+    }
+
+    if (password.length < 6) {
+      toast.warning("La contraseña debe tener al menos 6 caracteres.");
       return;
     }
 
     if (password !== confirmPassword) {
-      toast.error("Las contraseñas no coinciden");
+      toast.error("Las contraseñas no coinciden.");
       return;
     }
 
     try {
       setLoading(true);
 
-      const res = await fetch("/api/cambiar-clave", {
+      const res = await fetch("/api/admin/reset-password", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({
+          userId,
+          password,
+        }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-        toast.error(data?.message || "Error al cambiar la contraseña");
+        toast.error(data?.error || "Error al actualizar la contraseña.");
         return;
       }
 
-      // ✅ Mensaje PRO
-      toast.success("Contraseña actualizada correctamente");
+      toast.success(data?.message || "Contraseña actualizada correctamente.");
 
-      // limpiar campos
       setPassword("");
       setConfirmPassword("");
 
-    } catch (error) {
-      console.error(error);
-      toast.error("Error inesperado");
+      setTimeout(() => {
+        router.push("/usuarios");
+      }, 1200);
+    } catch (error: any) {
+      console.error("Error al cambiar contraseña:", error);
+      toast.error(error?.message || "Error inesperado.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
+    <div className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
       <form
         onSubmit={handleChangePassword}
-        className="bg-white p-6 rounded-lg shadow-md w-full max-w-md"
+        className="w-full max-w-md rounded-xl bg-white p-7 shadow-md"
       >
-        <h2 className="text-xl font-semibold mb-4">
+        <h2 className="mb-5 text-3xl font-bold text-gray-900">
           Cambiar contraseña
         </h2>
 
-        <input
-          type="password"
-          placeholder="Nueva contraseña"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full mb-3 p-2 border rounded"
-        />
+        <div className="space-y-4">
+          <input
+            type="password"
+            placeholder="Nueva contraseña"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full rounded-md border border-gray-300 px-4 py-3 outline-none transition focus:border-red-600"
+            disabled={loading}
+          />
 
-        <input
-          type="password"
-          placeholder="Confirmar contraseña"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          className="w-full mb-4 p-2 border rounded"
-        />
+          <input
+            type="password"
+            placeholder="Confirmar contraseña"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            className="w-full rounded-md border border-gray-300 px-4 py-3 outline-none transition focus:border-red-600"
+            disabled={loading}
+          />
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-red-600 text-white p-2 rounded hover:bg-red-700 transition"
-        >
-          {loading ? "Actualizando..." : "Actualizar contraseña"}
-        </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-md bg-red-600 px-4 py-3 text-lg font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {loading ? "Actualizando..." : "Actualizar contraseña"}
+          </button>
+        </div>
       </form>
     </div>
   );
