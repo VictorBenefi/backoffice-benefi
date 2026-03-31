@@ -1,13 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 export default function CambiarClavePage() {
-  const supabase = createClient();
-  const router = useRouter();
-
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -15,108 +11,81 @@ export default function CambiarClavePage() {
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!password.trim()) {
-      alert("Debés ingresar una nueva contraseña.");
-      return;
-    }
-
-    if (password.length < 6) {
-      alert("La contraseña debe tener al menos 6 caracteres.");
+    if (!password || !confirmPassword) {
+      toast.warning("Todos los campos son obligatorios");
       return;
     }
 
     if (password !== confirmPassword) {
-      alert("Las contraseñas no coinciden.");
+      toast.error("Las contraseñas no coinciden");
       return;
     }
 
-    setLoading(true);
-
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      setLoading(true);
 
-      if (!user?.id || !user?.email) {
-        alert("No se pudo identificar el usuario.");
-        setLoading(false);
-        return;
-      }
-
-      const response = await fetch("/api/auth/change-password", {
+      const res = await fetch("/api/cambiar-clave", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          userId: user.id,
-          email: user.email,
-          password,
-        }),
+        body: JSON.stringify({ password }),
       });
 
-      const contentType = response.headers.get("content-type") || "";
-      let result: any = null;
+      const data = await res.json();
 
-      if (contentType.includes("application/json")) {
-        result = await response.json();
-      } else {
-        const text = await response.text();
-        console.error("Respuesta no JSON:", text);
-        throw new Error(
-          "La API no respondió JSON. Revisá app/api/auth/change-password/route.ts"
-        );
-      }
-
-      if (!response.ok) {
-        alert(result.error || "No se pudo actualizar la contraseña.");
-        setLoading(false);
+      if (!res.ok) {
+        toast.error(data?.message || "Error al cambiar la contraseña");
         return;
       }
 
-      alert("Contraseña actualizada correctamente.");
-      router.push("/dashboard");
-    } catch (error: any) {
+      // ✅ Mensaje PRO
+      toast.success("Contraseña actualizada correctamente");
+
+      // limpiar campos
+      setPassword("");
+      setConfirmPassword("");
+
+    } catch (error) {
       console.error(error);
-      alert(error.message || "Ocurrió un error al cambiar la contraseña.");
+      toast.error("Error inesperado");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-100">
+    <div className="flex items-center justify-center min-h-screen">
       <form
         onSubmit={handleChangePassword}
-        className="w-full max-w-md rounded-xl bg-white p-6 shadow-md space-y-4"
+        className="bg-white p-6 rounded-lg shadow-md w-full max-w-md"
       >
-        <h1 className="text-2xl font-bold text-center">Cambiar contraseña</h1>
-        <p className="text-sm text-gray-500 text-center">
-          Debés cambiar tu contraseña antes de continuar
-        </p>
+        <h2 className="text-xl font-semibold mb-4">
+          Cambiar contraseña
+        </h2>
 
         <input
           type="password"
           placeholder="Nueva contraseña"
-          className="w-full rounded-md border px-3 py-2"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          className="w-full mb-3 p-2 border rounded"
         />
 
         <input
           type="password"
-          placeholder="Confirmar nueva contraseña"
-          className="w-full rounded-md border px-3 py-2"
+          placeholder="Confirmar contraseña"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
+          className="w-full mb-4 p-2 border rounded"
         />
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-md bg-black px-4 py-2 text-white"
+          className="w-full bg-red-600 text-white p-2 rounded hover:bg-red-700 transition"
         >
-          {loading ? "Actualizando..." : "Guardar nueva contraseña"}
+          {loading ? "Actualizando..." : "Actualizar contraseña"}
         </button>
       </form>
     </div>
