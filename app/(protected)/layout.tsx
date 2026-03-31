@@ -51,8 +51,8 @@ export default async function ProtectedLayout({
 
   return (
     <div className="flex min-h-screen bg-gray-100">
-      <aside className="w-64 bg-[#050816] text-white flex flex-col justify-between">
-        <div>
+      <aside className="w-72 min-w-[280px] bg-[#050816] text-white flex flex-col justify-between">        
+      <div>
           <div className="px-6 py-6 border-b border-slate-800">
             <Image
               src="/logo-benefi.png"
@@ -78,7 +78,7 @@ export default async function ProtectedLayout({
               <Link
                 key={item.href}
                 href={item.href}
-                className="block px-3 py-2 rounded-md text-sm hover:bg-slate-800 transition"
+                className="block px-3 py-2 rounded-md text-sm hover:bg-slate-800 transition whitespace-nowrap overflow-hidden text-ellipsis"
               >
                 {item.label}
               </Link>
