@@ -7,7 +7,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
-      <body>{children}</body>
-    </html>
+  <body className="bg-slate-100 text-slate-900" suppressHydrationWarning>
+    {children}
+  </body>
+</html>
   );
 }
