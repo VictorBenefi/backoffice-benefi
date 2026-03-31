@@ -45,9 +45,9 @@ export async function POST(req: Request) {
     }
 
     const { error: appUserError } = await supabaseAdmin
-      .from("app_users")
-      .update({ must_change_password: false })
-      .eq("id", userId);
+  .from("app_users")
+  .update({ must_change_password: false })
+  .eq("auth_user_id", userId);
 
     if (appUserError) {
       return NextResponse.json(
