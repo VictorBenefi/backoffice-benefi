@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 
 type AppUser = {
   id: string;
+  auth_user_id: string | null;
   name: string | null;
   email: string | null;
   role: string | null;
@@ -130,6 +131,11 @@ export default function UsuariosClient() {
       return;
     }
 
+    if (!resetUser.auth_user_id) {
+      toast.error("Este usuario no tiene auth_user_id vinculado.");
+      return;
+    }
+
     if (!resetPasswordValue.trim() || !resetConfirmPassword.trim()) {
       toast.warning("Debés completar ambos campos.");
       return;
@@ -154,7 +160,7 @@ export default function UsuariosClient() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId: resetUser.id,
+          userId: resetUser.auth_user_id,
           password: resetPasswordValue,
         }),
       });
@@ -168,6 +174,7 @@ export default function UsuariosClient() {
 
       toast.success(result?.message || "Contraseña actualizada correctamente.");
       closeResetModal();
+      await fetchUsers();
     } catch (error) {
       console.error(error);
       toast.error("Error al actualizar contraseña.");
