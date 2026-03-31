@@ -1,13 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 export default function CambiarClavePage() {
   const searchParams = useSearchParams();
-  const router = useRouter();
-
   const userId = useMemo(() => searchParams.get("userId") || "", [searchParams]);
 
   const [password, setPassword] = useState("");
@@ -51,10 +49,24 @@ export default function CambiarClavePage() {
         }),
       });
 
-      const data = await res.json().catch(() => null);
+      const rawText = await res.text();
+
+      let data: any = null;
+      try {
+        data = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        data = { rawText };
+      }
+
+      console.log("RESET PASSWORD STATUS:", res.status);
+      console.log("RESET PASSWORD RESPONSE:", data);
 
       if (!res.ok) {
-        toast.error(data?.error || "Error al actualizar la contraseña.");
+        toast.error(
+          data?.error ||
+            data?.message ||
+            `Error al actualizar la contraseña (${res.status})`
+        );
         return;
       }
 
@@ -62,10 +74,6 @@ export default function CambiarClavePage() {
 
       setPassword("");
       setConfirmPassword("");
-
-      setTimeout(() => {
-        router.push("/usuarios");
-      }, 1200);
     } catch (error: any) {
       console.error("Error al cambiar contraseña:", error);
       toast.error(error?.message || "Error inesperado.");
@@ -83,6 +91,10 @@ export default function CambiarClavePage() {
         <h2 className="mb-5 text-3xl font-bold text-gray-900">
           Cambiar contraseña
         </h2>
+
+        <p className="mb-4 text-sm text-gray-500 break-all">
+          UserId detectado: {userId || "no encontrado"}
+        </p>
 
         <div className="space-y-4">
           <input
