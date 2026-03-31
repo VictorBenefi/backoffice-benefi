@@ -1,16 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 export default function CambiarClavePage() {
-  const searchParams = useSearchParams();
-  const userId = useMemo(() => searchParams.get("userId") || "", [searchParams]);
-
+  const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("userId") || "";
+    setUserId(id);
+  }, []);
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,24 +52,10 @@ export default function CambiarClavePage() {
         }),
       });
 
-      const rawText = await res.text();
-
-      let data: any = null;
-      try {
-        data = rawText ? JSON.parse(rawText) : null;
-      } catch {
-        data = { rawText };
-      }
-
-      console.log("RESET PASSWORD STATUS:", res.status);
-      console.log("RESET PASSWORD RESPONSE:", data);
+      const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-        toast.error(
-          data?.error ||
-            data?.message ||
-            `Error al actualizar la contraseña (${res.status})`
-        );
+        toast.error(data?.error || data?.message || "Error al actualizar la contraseña.");
         return;
       }
 
@@ -92,7 +81,7 @@ export default function CambiarClavePage() {
           Cambiar contraseña
         </h2>
 
-        <p className="mb-4 text-sm text-gray-500 break-all">
+        <p className="mb-4 break-all text-sm text-gray-500">
           UserId detectado: {userId || "no encontrado"}
         </p>
 
