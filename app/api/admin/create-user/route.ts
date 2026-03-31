@@ -99,18 +99,22 @@ export async function POST(req: Request) {
 
     const authUserId = createdUser.user.id;
 
-    const { error: insertError } = await supabaseAdmin
+    const insertPayload = {
+      auth_user_id: authUserId,
+      name,
+      email,
+      role,
+      is_active: true,
+      must_change_password: true,
+    };
+
+    console.log("CREATE USER INSERT PAYLOAD:", insertPayload);
+
+    const { data: insertedUser, error: insertError } = await supabaseAdmin
       .from("app_users")
-      .insert([
-        {
-          auth_user_id: authUserId,
-          name,
-          email,
-          role,
-          is_active: true,
-          must_change_password: true,
-        },
-      ]);
+      .insert([insertPayload])
+      .select("id, auth_user_id, email, must_change_password")
+      .single();
 
     if (insertError) {
       await supabaseAdmin.auth.admin.deleteUser(authUserId);
@@ -121,9 +125,22 @@ export async function POST(req: Request) {
       );
     }
 
+    if (!insertedUser?.auth_user_id) {
+      await supabaseAdmin.auth.admin.deleteUser(authUserId);
+
+      return NextResponse.json(
+        {
+          error:
+            "El usuario se creó en autenticación, pero app_users no guardó auth_user_id.",
+        },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
       ok: true,
       message: "Usuario creado correctamente.",
+      user: insertedUser,
     });
   } catch (error: any) {
     console.error("ERROR CREATE USER API:", error);
