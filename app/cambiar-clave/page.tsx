@@ -2,18 +2,45 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { createClient } from "@/lib/supabase/client";
 
 export default function CambiarClavePage() {
+  const supabase = createClient();
+
   const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const id = params.get("userId") || "";
-    setUserId(id);
-  }, []);
+    async function loadUser() {
+      try {
+        const { data, error } = await supabase.auth.getUser();
+
+        if (error) {
+          console.error("Error obteniendo usuario autenticado:", error);
+          return;
+        }
+
+        const authUserId = data?.user?.id || "";
+
+        if (authUserId) {
+          setUserId(authUserId);
+          return;
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        const idFromUrl = params.get("userId") || "";
+        if (idFromUrl) {
+          setUserId(idFromUrl);
+        }
+      } catch (error) {
+        console.error("Error cargando usuario:", error);
+      }
+    }
+
+    loadUser();
+  }, [supabase]);
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,7 +82,9 @@ export default function CambiarClavePage() {
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-        toast.error(data?.error || data?.message || "Error al actualizar la contraseña.");
+        toast.error(
+          data?.error || data?.message || "Error al actualizar la contraseña."
+        );
         return;
       }
 
@@ -63,6 +92,10 @@ export default function CambiarClavePage() {
 
       setPassword("");
       setConfirmPassword("");
+
+      setTimeout(() => {
+        window.location.href = "/";
+      }, 1200);
     } catch (error: any) {
       console.error("Error al cambiar contraseña:", error);
       toast.error(error?.message || "Error inesperado.");
@@ -82,7 +115,7 @@ export default function CambiarClavePage() {
         </h2>
 
         <p className="mb-4 break-all text-sm text-gray-500">
-          UserId detectado: {userId || "no encontrado"}
+          Usuario autenticado: {userId || "no detectado"}
         </p>
 
         <div className="space-y-4">
