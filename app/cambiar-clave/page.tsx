@@ -18,7 +18,7 @@ export default function CambiarClavePage() {
         const { data, error } = await supabase.auth.getUser();
 
         if (error) {
-          console.error("Error obteniendo usuario autenticado:", error);
+          console.error("Error obteniendo usuario:", error);
           return;
         }
 
@@ -26,16 +26,9 @@ export default function CambiarClavePage() {
 
         if (authUserId) {
           setUserId(authUserId);
-          return;
-        }
-
-        const params = new URLSearchParams(window.location.search);
-        const idFromUrl = params.get("userId") || "";
-        if (idFromUrl) {
-          setUserId(idFromUrl);
         }
       } catch (error) {
-        console.error("Error cargando usuario:", error);
+        console.error(error);
       }
     }
 
@@ -46,7 +39,7 @@ export default function CambiarClavePage() {
     e.preventDefault();
 
     if (!userId) {
-      toast.error("Falta el identificador del usuario.");
+      toast.error("No se pudo identificar el usuario.");
       return;
     }
 
@@ -88,17 +81,19 @@ export default function CambiarClavePage() {
         return;
       }
 
-      toast.success(data?.message || "Contraseña actualizada correctamente.");
+      toast.success("Contraseña actualizada correctamente.");
 
       setPassword("");
       setConfirmPassword("");
 
+      // redirige al login
       setTimeout(() => {
         window.location.href = "/";
       }, 1200);
+
     } catch (error: any) {
-      console.error("Error al cambiar contraseña:", error);
-      toast.error(error?.message || "Error inesperado.");
+      console.error(error);
+      toast.error("Error inesperado.");
     } finally {
       setLoading(false);
     }
@@ -110,12 +105,12 @@ export default function CambiarClavePage() {
         onSubmit={handleChangePassword}
         className="w-full max-w-md rounded-xl bg-white p-7 shadow-md"
       >
-        <h2 className="mb-5 text-3xl font-bold text-gray-900">
+        <h2 className="mb-2 text-3xl font-bold text-gray-900">
           Cambiar contraseña
         </h2>
 
-        <p className="mb-4 break-all text-sm text-gray-500">
-          Usuario autenticado: {userId || "no detectado"}
+        <p className="mb-5 text-sm text-gray-500">
+          Debes actualizar tu contraseña para continuar
         </p>
 
         <div className="space-y-4">
@@ -124,7 +119,7 @@ export default function CambiarClavePage() {
             placeholder="Nueva contraseña"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-4 py-3 outline-none transition focus:border-red-600"
+            className="w-full rounded-md border border-gray-300 px-4 py-3 outline-none focus:border-red-600"
             disabled={loading}
           />
 
@@ -133,14 +128,14 @@ export default function CambiarClavePage() {
             placeholder="Confirmar contraseña"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-4 py-3 outline-none transition focus:border-red-600"
+            className="w-full rounded-md border border-gray-300 px-4 py-3 outline-none focus:border-red-600"
             disabled={loading}
           />
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-md bg-red-600 px-4 py-3 text-lg font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-70"
+            className="w-full rounded-md bg-red-600 px-4 py-3 text-lg font-semibold text-white hover:bg-red-700 disabled:opacity-70"
           >
             {loading ? "Actualizando..." : "Actualizar contraseña"}
           </button>
