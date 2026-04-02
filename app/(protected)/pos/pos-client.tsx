@@ -61,10 +61,40 @@ export default function PosClient({
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  const [currentRole, setCurrentRole] = useState<string | null>(null);
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [vendorFilter, setVendorFilter] = useState("");
   const [merchantFilter, setMerchantFilter] = useState("");
+
+  const isVendor = currentRole === "vendedor";
+
+  const loadCurrentRole = async () => {
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user?.id) {
+      setCurrentRole(null);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("app_users")
+      .select("role")
+      .eq("auth_user_id", user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error al cargar rol actual:", error.message);
+      setCurrentRole(null);
+      return;
+    }
+
+    setCurrentRole(data?.role || null);
+  };
 
   const loadVendors = async () => {
     const { data, error } = await supabase
@@ -175,6 +205,7 @@ export default function PosClient({
 
     if (error) {
       console.error("Error al cargar POS:", error.message);
+      setPosDevices([]);
       return;
     }
 
@@ -182,6 +213,7 @@ export default function PosClient({
   };
 
   useEffect(() => {
+    loadCurrentRole();
     loadVendors();
     loadMerchants();
     loadPosDevices();
@@ -625,161 +657,165 @@ export default function PosClient({
     <main className="min-h-screen bg-gray-50 p-6">
       <h1 className="text-3xl font-bold mb-6">POS / Terminales</h1>
 
-      <div className="grid gap-6 md:grid-cols-[420px_1fr]">
-        <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
-          <h2 className="text-xl font-semibold mb-4">
-            {editingId ? "Editar POS" : "Nuevo POS"}
-          </h2>
+      <div className={`grid gap-6 ${isVendor ? "grid-cols-1" : "md:grid-cols-[420px_1fr]"}`}>
+        {!isVendor && (
+          <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
+            <h2 className="text-xl font-semibold mb-4">
+              {editingId ? "Editar POS" : "Nuevo POS"}
+            </h2>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm mb-1">Código interno</label>
-              <input
-                type="text"
-                required
-                className="w-full rounded-md border px-3 py-2"
-                value={formData.code}
-                onChange={(e) => handleChange("code", e.target.value)}
-                placeholder="Ej: POS-001"
-              />
-            </div>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm mb-1">Código interno</label>
+                <input
+                  type="text"
+                  required
+                  className="w-full rounded-md border px-3 py-2"
+                  value={formData.code}
+                  onChange={(e) => handleChange("code", e.target.value)}
+                  placeholder="Ej: POS-001"
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm mb-1">Marca</label>
-              <input
-                type="text"
-                required
-                className="w-full rounded-md border px-3 py-2"
-                value={formData.brand}
-                onChange={(e) => handleChange("brand", e.target.value)}
-                placeholder="Ej: UROVO"
-              />
-            </div>
+              <div>
+                <label className="block text-sm mb-1">Marca</label>
+                <input
+                  type="text"
+                  required
+                  className="w-full rounded-md border px-3 py-2"
+                  value={formData.brand}
+                  onChange={(e) => handleChange("brand", e.target.value)}
+                  placeholder="Ej: UROVO"
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm mb-1">Modelo</label>
-              <input
-                type="text"
-                required
-                className="w-full rounded-md border px-3 py-2"
-                value={formData.model}
-                onChange={(e) => handleChange("model", e.target.value)}
-                placeholder="Ej: i9100"
-              />
-            </div>
+              <div>
+                <label className="block text-sm mb-1">Modelo</label>
+                <input
+                  type="text"
+                  required
+                  className="w-full rounded-md border px-3 py-2"
+                  value={formData.model}
+                  onChange={(e) => handleChange("model", e.target.value)}
+                  placeholder="Ej: i9100"
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm mb-1">Serial</label>
-              <input
-                type="text"
-                required
-                className="w-full rounded-md border px-3 py-2"
-                value={formData.serial}
-                onChange={(e) => handleChange("serial", e.target.value)}
-                placeholder="Ej: SRL123456"
-              />
-            </div>
+              <div>
+                <label className="block text-sm mb-1">Serial</label>
+                <input
+                  type="text"
+                  required
+                  className="w-full rounded-md border px-3 py-2"
+                  value={formData.serial}
+                  onChange={(e) => handleChange("serial", e.target.value)}
+                  placeholder="Ej: SRL123456"
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm mb-1">IMEI 1</label>
-              <input
-                type="text"
-                required
-                className="w-full rounded-md border px-3 py-2"
-                value={formData.imei}
-                onChange={(e) => handleChange("imei", e.target.value)}
-                placeholder="Ej: 123456789012345"
-              />
-            </div>
+              <div>
+                <label className="block text-sm mb-1">IMEI 1</label>
+                <input
+                  type="text"
+                  required
+                  className="w-full rounded-md border px-3 py-2"
+                  value={formData.imei}
+                  onChange={(e) => handleChange("imei", e.target.value)}
+                  placeholder="Ej: 123456789012345"
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm mb-1">IMEI 2</label>
-              <input
-                type="text"
-                className="w-full rounded-md border px-3 py-2"
-                value={formData.imei_2}
-                onChange={(e) => handleChange("imei_2", e.target.value)}
-                placeholder="Ej: 987654321098765"
-              />
-            </div>
+              <div>
+                <label className="block text-sm mb-1">IMEI 2</label>
+                <input
+                  type="text"
+                  className="w-full rounded-md border px-3 py-2"
+                  value={formData.imei_2}
+                  onChange={(e) => handleChange("imei_2", e.target.value)}
+                  placeholder="Ej: 987654321098765"
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm mb-1">Estado</label>
-              <select
-                className="w-full rounded-md border px-3 py-2"
-                value={formData.status}
-                onChange={(e) => handleChange("status", e.target.value)}
-              >
-                <option value="in_stock">En stock</option>
-                <option value="assigned_vendor">Asignado a vendedor</option>
-                <option value="assigned_merchant">Asignado a comercio</option>
-                <option value="maintenance">Mantenimiento</option>
-                <option value="inactive">Inactivo</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm mb-1">Vendedor asignado</label>
-              <select
-                className="w-full rounded-md border px-3 py-2"
-                value={formData.vendor_id}
-                onChange={(e) => handleChange("vendor_id", e.target.value)}
-              >
-                <option value="">Seleccionar vendedor</option>
-                {vendors.map((vendor) => (
-                  <option key={vendor.id} value={vendor.id}>
-                    {vendor.name || "Sin nombre"}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm mb-1">Comercio asignado</label>
-              <select
-                className="w-full rounded-md border px-3 py-2"
-                value={formData.merchant_id}
-                onChange={(e) => handleChange("merchant_id", e.target.value)}
-              >
-                <option value="">Seleccionar comercio</option>
-                {merchants.map((merchant) => (
-                  <option key={merchant.id} value={merchant.id}>
-                    {merchant.name || "Sin nombre"}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                type="submit"
-                disabled={loading}
-                className="rounded-md bg-black px-4 py-2 text-white"
-              >
-                {loading
-                  ? "Guardando..."
-                  : editingId
-                  ? "Actualizar POS"
-                  : "Guardar POS"}
-              </button>
-
-              {editingId && (
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="rounded-md border px-4 py-2"
+              <div>
+                <label className="block text-sm mb-1">Estado</label>
+                <select
+                  className="w-full rounded-md border px-3 py-2"
+                  value={formData.status}
+                  onChange={(e) => handleChange("status", e.target.value)}
                 >
-                  Cancelar
+                  <option value="in_stock">En stock</option>
+                  <option value="assigned_vendor">Asignado a vendedor</option>
+                  <option value="assigned_merchant">Asignado a comercio</option>
+                  <option value="maintenance">Mantenimiento</option>
+                  <option value="inactive">Inactivo</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm mb-1">Vendedor asignado</label>
+                <select
+                  className="w-full rounded-md border px-3 py-2"
+                  value={formData.vendor_id}
+                  onChange={(e) => handleChange("vendor_id", e.target.value)}
+                >
+                  <option value="">Seleccionar vendedor</option>
+                  {vendors.map((vendor) => (
+                    <option key={vendor.id} value={vendor.id}>
+                      {vendor.name || "Sin nombre"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm mb-1">Comercio asignado</label>
+                <select
+                  className="w-full rounded-md border px-3 py-2"
+                  value={formData.merchant_id}
+                  onChange={(e) => handleChange("merchant_id", e.target.value)}
+                >
+                  <option value="">Seleccionar comercio</option>
+                  {merchants.map((merchant) => (
+                    <option key={merchant.id} value={merchant.id}>
+                      {merchant.name || "Sin nombre"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="rounded-md bg-black px-4 py-2 text-white"
+                >
+                  {loading
+                    ? "Guardando..."
+                    : editingId
+                    ? "Actualizar POS"
+                    : "Guardar POS"}
                 </button>
-              )}
-            </div>
-          </form>
-        </section>
+
+                {editingId && (
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="rounded-md border px-4 py-2"
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </div>
+            </form>
+          </section>
+        )}
 
         <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200 h-[850px] flex flex-col">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-xl font-semibold">Listado</h2>
+              <h2 className="text-xl font-semibold">
+                {isVendor ? "Mis POS asignados" : "Listado"}
+              </h2>
               <span className="text-sm text-slate-500">
                 {filteredPosDevices.length} de {posDevices.length} equipos
               </span>
@@ -794,11 +830,11 @@ export default function PosClient({
             </button>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 mb-4">
+          <div className={`grid gap-3 mb-4 ${isVendor ? "md:grid-cols-2 xl:grid-cols-3" : "md:grid-cols-2 xl:grid-cols-4"}`}>
             <input
               type="text"
               placeholder="Buscar por código, serial, IMEI..."
-              className="rounded-md border px-3 py-2 text-sm xl:col-span-2"
+              className={`rounded-md border px-3 py-2 text-sm ${isVendor ? "xl:col-span-2" : "xl:col-span-2"}`}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -824,35 +860,43 @@ export default function PosClient({
               Limpiar filtros
             </button>
 
-            <select
-              className="rounded-md border px-3 py-2 text-sm"
-              value={vendorFilter}
-              onChange={(e) => setVendorFilter(e.target.value)}
-            >
-              <option value="">Todos los vendedores</option>
-              {vendors.map((vendor) => (
-                <option key={vendor.id} value={vendor.id}>
-                  {vendor.name || "Sin nombre"}
-                </option>
-              ))}
-            </select>
+            {!isVendor && (
+              <>
+                <select
+                  className="rounded-md border px-3 py-2 text-sm"
+                  value={vendorFilter}
+                  onChange={(e) => setVendorFilter(e.target.value)}
+                >
+                  <option value="">Todos los vendedores</option>
+                  {vendors.map((vendor) => (
+                    <option key={vendor.id} value={vendor.id}>
+                      {vendor.name || "Sin nombre"}
+                    </option>
+                  ))}
+                </select>
 
-            <select
-              className="rounded-md border px-3 py-2 text-sm"
-              value={merchantFilter}
-              onChange={(e) => setMerchantFilter(e.target.value)}
-            >
-              <option value="">Todos los comercios</option>
-              {merchants.map((merchant) => (
-                <option key={merchant.id} value={merchant.id}>
-                  {merchant.name || "Sin nombre"}
-                </option>
-              ))}
-            </select>
+                <select
+                  className="rounded-md border px-3 py-2 text-sm"
+                  value={merchantFilter}
+                  onChange={(e) => setMerchantFilter(e.target.value)}
+                >
+                  <option value="">Todos los comercios</option>
+                  {merchants.map((merchant) => (
+                    <option key={merchant.id} value={merchant.id}>
+                      {merchant.name || "Sin nombre"}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
           </div>
 
           {filteredPosDevices.length === 0 ? (
-            <p className="text-gray-500">No hay POS para mostrar.</p>
+            <p className="text-gray-500">
+              {isVendor
+                ? "No tenés POS asignados en este momento."
+                : "No hay POS para mostrar."}
+            </p>
           ) : (
             <div className="overflow-auto flex-1 rounded-xl border border-slate-200">
               <table className="min-w-full text-sm">
@@ -867,7 +911,7 @@ export default function PosClient({
                     <th className="px-4 py-3">Estado</th>
                     <th className="px-4 py-3">Vendedor</th>
                     <th className="px-4 py-3">Comercio</th>
-                    <th className="px-4 py-3">Acciones</th>
+                    {!isVendor && <th className="px-4 py-3">Acciones</th>}
                   </tr>
                 </thead>
 
@@ -897,25 +941,27 @@ export default function PosClient({
                       <td className="px-4 py-3">
                         {getMerchantName(pos.merchant_id)}
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            onClick={() => handleEdit(pos)}
-                            className="rounded-md bg-blue-600 px-3 py-1 text-xs text-white"
-                          >
-                            Editar
-                          </button>
-
-                          {canDeletePos && (
+                      {!isVendor && (
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-2">
                             <button
-                              onClick={() => handleDelete(pos.id)}
-                              className="rounded-md bg-red-600 px-3 py-1 text-xs text-white"
+                              onClick={() => handleEdit(pos)}
+                              className="rounded-md bg-blue-600 px-3 py-1 text-xs text-white"
                             >
-                              Eliminar
+                              Editar
                             </button>
-                          )}
-                        </div>
-                      </td>
+
+                            {canDeletePos && (
+                              <button
+                                onClick={() => handleDelete(pos.id)}
+                                className="rounded-md bg-red-600 px-3 py-1 text-xs text-white"
+                              >
+                                Eliminar
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
