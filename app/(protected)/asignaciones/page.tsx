@@ -220,33 +220,48 @@ export default function AsignacionesPage() {
 
     const auditUser = await getCurrentAuditUser();
 
-    setLoading(true);
+setLoading(true);
 
-    await supabase
-      .from("pos_devices")
-      .update({
-        status: config.posStatus,
-        vendor_id: config.vendor_id,
-        merchant_id: config.merchant_id,
-      })
-      .eq("id", formData.pos_id);
+const { error: posUpdateError } = await supabase
+  .from("pos_devices")
+  .update({
+    status: config.posStatus,
+    vendor_id: config.vendor_id,
+    merchant_id: config.merchant_id,
+  })
+  .eq("id", formData.pos_id);
 
-    await supabase.from("pos_movements").insert([
-      {
-        pos_id: formData.pos_id,
-        pos_code: selectedPos?.code,
-        type: config.movementType,
-        vendor_id: config.vendor_id,
-        vendor_name: selectedVendorName,
-        merchant_id: config.merchant_id,
-        merchant_name: selectedMerchantName,
-        user_id: auditUser?.id,
-        user_name: auditUser?.name,
-        user_email: auditUser?.email,
-        user_role: auditUser?.role,
-        notes: formData.notes || "Movimiento desde asignaciones",
-      },
-    ]);
+if (posUpdateError) {
+  setLoading(false);
+  alert(`No se pudo actualizar el POS: ${posUpdateError.message}`);
+  console.error(posUpdateError);
+  return;
+}
+
+const { error: movementError } = await supabase.from("pos_movements").insert([
+  {
+    pos_id: formData.pos_id,
+    pos_code: selectedPos?.code,
+    type: config.movementType,
+    vendor_id: config.vendor_id,
+    vendor_name: selectedVendorName,
+    merchant_id: config.merchant_id,
+    merchant_name: selectedMerchantName,
+    user_id: auditUser?.id,
+    user_name: auditUser?.name,
+    user_email: auditUser?.email,
+    user_role: auditUser?.role,
+    notes: formData.notes || "Movimiento desde asignaciones",
+  },
+]);
+
+if (movementError) {
+  setLoading(false);
+  alert(`El POS se actualizó, pero falló el movimiento: ${movementError.message}`);
+  console.error(movementError);
+  loadData();
+  return;
+}
 
     setLoading(false);
 
