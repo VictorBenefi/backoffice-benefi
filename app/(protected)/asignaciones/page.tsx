@@ -19,6 +19,7 @@ type Vendor = {
 type Merchant = {
   id: string;
   name: string | null;
+  vendor_id: string | null;
 };
 
 type AppUser = {
@@ -69,12 +70,15 @@ export default function AsignacionesPage() {
         .select("id, code, status, vendor_id, merchant_id")
         .order("code"),
       supabase.from("vendors").select("id, name").order("name"),
-      supabase.from("merchants").select("id, name").order("name"),
+      supabase
+        .from("merchants")
+        .select("id, name, vendor_id")
+        .order("name"),
     ]);
 
     setPosDevices(posRes.data || []);
     setVendors(vendorsRes.data || []);
-    setMerchants(merchantsRes.data || []);
+    setMerchants((merchantsRes.data as Merchant[]) || []);
   };
 
   useEffect(() => {
@@ -90,6 +94,17 @@ export default function AsignacionesPage() {
         pos_id: value,
         vendor_id: selectedPos?.vendor_id ?? "",
         merchant_id: selectedPos?.merchant_id ?? "",
+      }));
+      return;
+    }
+
+    if (field === "merchant_id") {
+      const selectedMerchant = merchants.find((m) => m.id === value);
+
+      setFormData((prev) => ({
+        ...prev,
+        merchant_id: value,
+        vendor_id: selectedMerchant?.vendor_id ?? "",
       }));
       return;
     }
@@ -190,11 +205,9 @@ export default function AsignacionesPage() {
       return;
     }
 
-    if (formData.action === "assign_merchant") {
-      if (!formData.vendor_id || !formData.merchant_id) {
-        alert("Seleccioná vendedor y comercio.");
-        return;
-      }
+    if (formData.action === "assign_merchant" && !formData.merchant_id) {
+      alert("Seleccioná un comercio.");
+      return;
     }
 
     const selectedPos = posDevices.find((p) => p.id === formData.pos_id);
@@ -268,8 +281,7 @@ export default function AsignacionesPage() {
               <option value="">Seleccionar POS</option>
               {posDevices.map((pos) => (
                 <option key={pos.id} value={pos.id}>
-                  {pos.code || "Sin código"} -{" "}
-                  {getStatusLabel(pos.status)}
+                  {pos.code || "Sin código"} - {getStatusLabel(pos.status)}
                 </option>
               ))}
             </select>
@@ -298,7 +310,6 @@ export default function AsignacionesPage() {
           </div>
 
           {(formData.action === "assign_vendor" ||
-            formData.action === "assign_merchant" ||
             formData.action === "maintenance") && (
             <div>
               <label className="block text-sm mb-1">Vendedor</label>
@@ -332,6 +343,9 @@ export default function AsignacionesPage() {
                   </option>
                 ))}
               </select>
+              <p className="mt-1 text-xs text-slate-500">
+                El vendedor se toma automáticamente del comercio seleccionado.
+              </p>
             </div>
           )}
 
@@ -346,8 +360,11 @@ export default function AsignacionesPage() {
           </div>
 
           <div className="flex gap-3">
-            <button className="bg-black text-white px-4 py-2 rounded-md">
-              Guardar asignación
+            <button
+              disabled={loading}
+              className="bg-black text-white px-4 py-2 rounded-md"
+            >
+              {loading ? "Guardando..." : "Guardar asignación"}
             </button>
 
             <button

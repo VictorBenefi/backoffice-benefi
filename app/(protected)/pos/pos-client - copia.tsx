@@ -12,7 +12,6 @@ type Vendor = {
 type Merchant = {
   id: string;
   name: string | null;
-  vendor_id: string | null;
 };
 
 type AppUser = {
@@ -123,7 +122,7 @@ export default function PosClient({
   const loadMerchants = async () => {
     const { data, error } = await supabase
       .from("merchants")
-      .select("id, name, vendor_id")
+      .select("id, name")
       .order("name", { ascending: true });
 
     if (error) {
@@ -132,7 +131,7 @@ export default function PosClient({
       return;
     }
 
-    setMerchants((data as Merchant[]) || []);
+    setMerchants(data || []);
   };
 
   const loadPosDevices = async (userId: string, role?: string | null) => {
@@ -225,7 +224,10 @@ export default function PosClient({
 
       const role = await loadCurrentRole(user.id);
 
+      // Primero cargamos lo importante
       await loadPosDevices(user.id, role);
+
+      // Después lo secundario
       await Promise.all([loadVendors(), loadMerchants()]);
 
       setPageLoading(false);
@@ -234,26 +236,7 @@ export default function PosClient({
     init();
   }, []);
 
-  const handleChange = (
-    field: keyof typeof initialForm,
-    value: string
-  ) => {
-    if (field === "merchant_id") {
-      let nextVendorId = formData.vendor_id;
-
-      if (value) {
-        const selectedMerchant = merchants.find((m) => m.id === value);
-        nextVendorId = selectedMerchant?.vendor_id || "";
-      }
-
-      setFormData((prev) => ({
-        ...prev,
-        merchant_id: value,
-        vendor_id: nextVendorId,
-      }));
-      return;
-    }
-
+  const handleChange = (field: keyof typeof initialForm, value: string) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
@@ -479,21 +462,8 @@ export default function PosClient({
 
     setLoading(true);
 
-    let vendorIdToSave = formData.vendor_id || null;
-
-    if (formData.merchant_id) {
-      const selectedMerchant = merchants.find(
-        (m) => m.id === formData.merchant_id
-      );
-
-      if (selectedMerchant?.vendor_id) {
-        vendorIdToSave = selectedMerchant.vendor_id;
-      }
-    }
-
-    const selectedVendorName = vendorIdToSave
-      ? getVendorName(vendorIdToSave)
-      : null;
+    const selectedVendorName =
+      formData.vendor_id ? getVendorName(formData.vendor_id) : null;
 
     const selectedMerchantName =
       formData.merchant_id ? getMerchantName(formData.merchant_id) : null;
@@ -513,7 +483,7 @@ export default function PosClient({
           imei: formData.imei.trim(),
           imei_2: formData.imei_2.trim() || null,
           status: formData.status,
-          vendor_id: vendorIdToSave,
+          vendor_id: formData.vendor_id || null,
           merchant_id: formData.merchant_id || null,
         })
         .eq("id", editingId);
@@ -527,7 +497,7 @@ export default function PosClient({
 
       const changed =
         currentPos?.status !== formData.status ||
-        (currentPos?.vendor_id || "") !== (vendorIdToSave || "") ||
+        (currentPos?.vendor_id || "") !== formData.vendor_id ||
         (currentPos?.merchant_id || "") !== formData.merchant_id;
 
       if (changed) {
@@ -540,7 +510,7 @@ export default function PosClient({
               pos_id: editingId,
               pos_code: formData.code.trim(),
               type: movementType,
-              vendor_id: vendorIdToSave,
+              vendor_id: formData.vendor_id || null,
               vendor_name:
                 selectedVendorName && selectedVendorName !== "-"
                   ? selectedVendorName
@@ -587,7 +557,7 @@ export default function PosClient({
           imei: formData.imei.trim(),
           imei_2: formData.imei_2.trim() || null,
           status: formData.status,
-          vendor_id: vendorIdToSave,
+          vendor_id: formData.vendor_id || null,
           merchant_id: formData.merchant_id || null,
         },
       ])
@@ -617,7 +587,7 @@ export default function PosClient({
           pos_id: data.id,
           pos_code: formData.code.trim(),
           type: movementType,
-          vendor_id: vendorIdToSave,
+          vendor_id: formData.vendor_id || null,
           vendor_name:
             selectedVendorName && selectedVendorName !== "-"
               ? selectedVendorName
@@ -821,7 +791,6 @@ export default function PosClient({
                   className="w-full rounded-md border px-3 py-2"
                   value={formData.vendor_id}
                   onChange={(e) => handleChange("vendor_id", e.target.value)}
-                  disabled={!!formData.merchant_id}
                 >
                   <option value="">Seleccionar vendedor</option>
                   {vendors.map((vendor) => (
@@ -830,11 +799,6 @@ export default function PosClient({
                     </option>
                   ))}
                 </select>
-                {formData.merchant_id && (
-                  <p className="mt-1 text-xs text-slate-500">
-                    El vendedor se toma automáticamente del comercio seleccionado.
-                  </p>
-                )}
               </div>
 
               <div>
