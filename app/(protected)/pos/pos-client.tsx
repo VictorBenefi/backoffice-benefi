@@ -4,24 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/client";
 
-type Vendor = {
-  id: string;
-  name: string | null;
-};
-
-type Merchant = {
-  id: string;
-  name: string | null;
-  vendor_id: string | null;
-};
-
-type AppUser = {
-  id: string;
-  name: string | null;
-  email: string | null;
-  role: string | null;
-};
-
 type PosDevice = {
   id: string;
   code: string | null;
@@ -30,9 +12,6 @@ type PosDevice = {
   serial: string | null;
   imei: string | null;
   imei_2: string | null;
-  status: string | null;
-  vendor_id: string | null;
-  merchant_id: string | null;
   created_at: string;
 };
 
@@ -43,9 +22,6 @@ const initialForm = {
   serial: "",
   imei: "",
   imei_2: "",
-  status: "in_stock",
-  vendor_id: "",
-  merchant_id: "",
 };
 
 export default function PosClient({
@@ -56,8 +32,6 @@ export default function PosClient({
   const supabase = createClient();
 
   const [formData, setFormData] = useState(initialForm);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [posDevices, setPosDevices] = useState<PosDevice[]>([]);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
@@ -67,9 +41,6 @@ export default function PosClient({
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [vendorFilter, setVendorFilter] = useState("");
-  const [merchantFilter, setMerchantFilter] = useState("");
 
   const isVendor = currentRole === "vendedor";
 
@@ -103,36 +74,6 @@ export default function PosClient({
     const role = data?.role || null;
     setCurrentRole(role);
     return role;
-  };
-
-  const loadVendors = async () => {
-    const { data, error } = await supabase
-      .from("vendors")
-      .select("id, name")
-      .order("name", { ascending: true });
-
-    if (error) {
-      console.error("Error al cargar vendedores:", error.message);
-      setVendors([]);
-      return;
-    }
-
-    setVendors(data || []);
-  };
-
-  const loadMerchants = async () => {
-    const { data, error } = await supabase
-      .from("merchants")
-      .select("id, name, vendor_id")
-      .order("name", { ascending: true });
-
-    if (error) {
-      console.error("Error al cargar comercios:", error.message);
-      setMerchants([]);
-      return;
-    }
-
-    setMerchants((data as Merchant[]) || []);
   };
 
   const loadPosDevices = async (userId: string, role?: string | null) => {
@@ -179,7 +120,7 @@ export default function PosClient({
 
       const { data, error } = await supabase
         .from("pos_devices")
-        .select("*")
+        .select("id, code, brand, model, serial, imei, imei_2, created_at")
         .in("merchant_id", merchantIds)
         .order("created_at", { ascending: false });
 
@@ -189,13 +130,13 @@ export default function PosClient({
         return;
       }
 
-      setPosDevices(data || []);
+      setPosDevices((data as PosDevice[]) || []);
       return;
     }
 
     const { data, error } = await supabase
       .from("pos_devices")
-      .select("*")
+      .select("id, code, brand, model, serial, imei, imei_2, created_at")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -204,7 +145,7 @@ export default function PosClient({
       return;
     }
 
-    setPosDevices(data || []);
+    setPosDevices((data as PosDevice[]) || []);
   };
 
   useEffect(() => {
@@ -224,36 +165,16 @@ export default function PosClient({
       setCurrentUserId(user.id);
 
       const role = await loadCurrentRole(user.id);
-
       await loadPosDevices(user.id, role);
-      await Promise.all([loadVendors(), loadMerchants()]);
 
       setPageLoading(false);
     };
 
     init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleChange = (
-    field: keyof typeof initialForm,
-    value: string
-  ) => {
-    if (field === "merchant_id") {
-      let nextVendorId = formData.vendor_id;
-
-      if (value) {
-        const selectedMerchant = merchants.find((m) => m.id === value);
-        nextVendorId = selectedMerchant?.vendor_id || "";
-      }
-
-      setFormData((prev) => ({
-        ...prev,
-        merchant_id: value,
-        vendor_id: nextVendorId,
-      }));
-      return;
-    }
-
+  const handleChange = (field: keyof typeof initialForm, value: string) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
@@ -335,103 +256,6 @@ export default function PosClient({
     return true;
   };
 
-  const getVendorName = (vendorId: string | null) => {
-    if (!vendorId) return "-";
-    const vendor = vendors.find((v) => v.id === vendorId);
-    return vendor?.name || "-";
-  };
-
-  const getMerchantName = (merchantId: string | null) => {
-    if (!merchantId) return "-";
-    const merchant = merchants.find((m) => m.id === merchantId);
-    return merchant?.name || "-";
-  };
-
-  const getStatusLabel = (status: string | null) => {
-    switch (status) {
-      case "in_stock":
-        return "En stock";
-      case "assigned_vendor":
-        return "Asignado a vendedor";
-      case "assigned_merchant":
-        return "Asignado a comercio";
-      case "maintenance":
-        return "Mantenimiento";
-      case "inactive":
-        return "Inactivo";
-      default:
-        return status || "-";
-    }
-  };
-
-  const getStatusClass = (status: string | null) => {
-    switch (status) {
-      case "in_stock":
-        return "bg-emerald-100 text-emerald-700";
-      case "assigned_vendor":
-        return "bg-blue-100 text-blue-700";
-      case "assigned_merchant":
-        return "bg-violet-100 text-violet-700";
-      case "maintenance":
-        return "bg-amber-100 text-amber-700";
-      case "inactive":
-        return "bg-rose-100 text-rose-700";
-      default:
-        return "bg-slate-100 text-slate-700";
-    }
-  };
-
-  const getMovementType = (status: string) => {
-    switch (status) {
-      case "assigned_merchant":
-        return "asignado_comercio";
-      case "assigned_vendor":
-        return "asignado_vendedor";
-      case "maintenance":
-        return "mantenimiento";
-      case "inactive":
-        return "baja";
-      case "in_stock":
-      default:
-        return "retorno_stock";
-    }
-  };
-
-  const getCurrentAuditUser = async (): Promise<AppUser | null> => {
-    const user = await getCurrentUser();
-
-    if (!user?.email) {
-      return null;
-    }
-
-    const { data, error } = await supabase
-      .from("app_users")
-      .select("id, name, email, role")
-      .eq("email", user.email)
-      .maybeSingle();
-
-    if (error) {
-      console.error("Error al obtener usuario auditoría:", error.message);
-      return {
-        id: user.id,
-        name: user.email,
-        email: user.email,
-        role: null,
-      };
-    }
-
-    if (!data) {
-      return {
-        id: user.id,
-        name: user.email,
-        email: user.email,
-        role: null,
-      };
-    }
-
-    return data;
-  };
-
   const reloadPos = async () => {
     if (!currentUserId) return;
     await loadPosDevices(currentUserId, currentRole);
@@ -446,9 +270,6 @@ export default function PosClient({
       serial: pos.serial || "",
       imei: pos.imei || "",
       imei_2: pos.imei_2 || "",
-      status: pos.status || "in_stock",
-      vendor_id: pos.vendor_id || "",
-      merchant_id: pos.merchant_id || "",
     });
   };
 
@@ -479,30 +300,7 @@ export default function PosClient({
 
     setLoading(true);
 
-    let vendorIdToSave = formData.vendor_id || null;
-
-    if (formData.merchant_id) {
-      const selectedMerchant = merchants.find(
-        (m) => m.id === formData.merchant_id
-      );
-
-      if (selectedMerchant?.vendor_id) {
-        vendorIdToSave = selectedMerchant.vendor_id;
-      }
-    }
-
-    const selectedVendorName = vendorIdToSave
-      ? getVendorName(vendorIdToSave)
-      : null;
-
-    const selectedMerchantName =
-      formData.merchant_id ? getMerchantName(formData.merchant_id) : null;
-
-    const auditUser = await getCurrentAuditUser();
-
     if (editingId) {
-      const currentPos = posDevices.find((p) => p.id === editingId);
-
       const { error } = await supabase
         .from("pos_devices")
         .update({
@@ -512,136 +310,38 @@ export default function PosClient({
           serial: formData.serial.trim(),
           imei: formData.imei.trim(),
           imei_2: formData.imei_2.trim() || null,
-          status: formData.status,
-          vendor_id: vendorIdToSave,
-          merchant_id: formData.merchant_id || null,
         })
         .eq("id", editingId);
 
+      setLoading(false);
+
       if (error) {
-        setLoading(false);
         alert(`Error al editar POS: ${error.message}`);
         console.error(error);
         return;
       }
 
-      const changed =
-        currentPos?.status !== formData.status ||
-        (currentPos?.vendor_id || "") !== (vendorIdToSave || "") ||
-        (currentPos?.merchant_id || "") !== formData.merchant_id;
-
-      if (changed) {
-        const movementType = getMovementType(formData.status);
-
-        const { error: movementError } = await supabase
-          .from("pos_movements")
-          .insert([
-            {
-              pos_id: editingId,
-              pos_code: formData.code.trim(),
-              type: movementType,
-              vendor_id: vendorIdToSave,
-              vendor_name:
-                selectedVendorName && selectedVendorName !== "-"
-                  ? selectedVendorName
-                  : null,
-              merchant_id: formData.merchant_id || null,
-              merchant_name:
-                selectedMerchantName && selectedMerchantName !== "-"
-                  ? selectedMerchantName
-                  : null,
-              user_id: auditUser?.id || null,
-              user_name: auditUser?.name || null,
-              user_email: auditUser?.email || null,
-              user_role: auditUser?.role || null,
-              notes: "Actualización del POS",
-            },
-          ]);
-
-        if (movementError) {
-          setLoading(false);
-          alert(
-            `POS actualizado, pero falló el movimiento: ${movementError.message}`
-          );
-          console.error(movementError);
-          await reloadPos();
-          resetForm();
-          return;
-        }
-      }
-
-      setLoading(false);
       resetForm();
       await reloadPos();
       return;
     }
 
-    const { data, error } = await supabase
-      .from("pos_devices")
-      .insert([
-        {
-          code: formData.code.trim(),
-          brand: formData.brand.trim(),
-          model: formData.model.trim(),
-          serial: formData.serial.trim(),
-          imei: formData.imei.trim(),
-          imei_2: formData.imei_2.trim() || null,
-          status: formData.status,
-          vendor_id: vendorIdToSave,
-          merchant_id: formData.merchant_id || null,
-        },
-      ])
-      .select()
-      .single();
-
-    if (error) {
-      setLoading(false);
-      alert(`Error al guardar POS: ${error.message}`);
-      console.error(error);
-      return;
-    }
-
-    const movementType =
-      formData.status === "assigned_merchant"
-        ? "asignado_comercio"
-        : formData.status === "assigned_vendor"
-        ? "asignado_vendedor"
-        : formData.status === "maintenance"
-        ? "mantenimiento"
-        : "ingreso_stock";
-
-    const { error: movementError } = await supabase
-      .from("pos_movements")
-      .insert([
-        {
-          pos_id: data.id,
-          pos_code: formData.code.trim(),
-          type: movementType,
-          vendor_id: vendorIdToSave,
-          vendor_name:
-            selectedVendorName && selectedVendorName !== "-"
-              ? selectedVendorName
-              : null,
-          merchant_id: formData.merchant_id || null,
-          merchant_name:
-            selectedMerchantName && selectedMerchantName !== "-"
-              ? selectedMerchantName
-              : null,
-          user_id: auditUser?.id || null,
-          user_name: auditUser?.name || null,
-          user_email: auditUser?.email || null,
-          user_role: auditUser?.role || null,
-          notes: "Alta inicial del equipo",
-        },
-      ]);
+    const { error } = await supabase.from("pos_devices").insert([
+      {
+        code: formData.code.trim(),
+        brand: formData.brand.trim(),
+        model: formData.model.trim(),
+        serial: formData.serial.trim(),
+        imei: formData.imei.trim(),
+        imei_2: formData.imei_2.trim() || null,
+      },
+    ]);
 
     setLoading(false);
 
-    if (movementError) {
-      alert(`POS guardado, pero falló el movimiento: ${movementError.message}`);
-      console.error(movementError);
-      await reloadPos();
-      resetForm();
+    if (error) {
+      alert(`Error al guardar POS: ${error.message}`);
+      console.error(error);
       return;
     }
 
@@ -653,34 +353,20 @@ export default function PosClient({
     const searchText = search.trim().toLowerCase();
 
     return posDevices.filter((pos) => {
-      const matchesSearch =
+      return (
         !searchText ||
         (pos.code || "").toLowerCase().includes(searchText) ||
         (pos.brand || "").toLowerCase().includes(searchText) ||
         (pos.model || "").toLowerCase().includes(searchText) ||
         (pos.serial || "").toLowerCase().includes(searchText) ||
         (pos.imei || "").toLowerCase().includes(searchText) ||
-        (pos.imei_2 || "").toLowerCase().includes(searchText);
-
-      const matchesStatus = !statusFilter || pos.status === statusFilter;
-      const matchesVendor = !vendorFilter || pos.vendor_id === vendorFilter;
-      const matchesMerchant =
-        !merchantFilter || pos.merchant_id === merchantFilter;
-
-      return (
-        matchesSearch &&
-        matchesStatus &&
-        matchesVendor &&
-        matchesMerchant
+        (pos.imei_2 || "").toLowerCase().includes(searchText)
       );
     });
-  }, [posDevices, search, statusFilter, vendorFilter, merchantFilter]);
+  }, [posDevices, search]);
 
   const clearFilters = () => {
     setSearch("");
-    setStatusFilter("");
-    setVendorFilter("");
-    setMerchantFilter("");
   };
 
   const handleExportExcel = () => {
@@ -691,9 +377,9 @@ export default function PosClient({
       Serial: pos.serial || "",
       "IMEI 1": pos.imei || "",
       "IMEI 2": pos.imei_2 || "",
-      Estado: getStatusLabel(pos.status),
-      Vendedor: getVendorName(pos.vendor_id),
-      Comercio: getMerchantName(pos.merchant_id),
+      "Fecha alta": pos.created_at
+        ? new Date(pos.created_at).toLocaleString("es-AR")
+        : "",
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
@@ -705,8 +391,8 @@ export default function PosClient({
   if (pageLoading) {
     return (
       <main className="min-h-screen bg-gray-50 p-6">
-        <h1 className="text-3xl font-bold mb-6">POS / Terminales</h1>
-        <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
+        <h1 className="mb-6 text-3xl font-bold">POS / Terminales</h1>
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-gray-500">Cargando POS...</p>
         </div>
       </main>
@@ -715,7 +401,7 @@ export default function PosClient({
 
   return (
     <main className="min-h-screen bg-gray-50 p-6">
-      <h1 className="text-3xl font-bold mb-6">POS / Terminales</h1>
+      <h1 className="mb-6 text-3xl font-bold">POS / Terminales</h1>
 
       <div
         className={`grid gap-6 ${
@@ -723,14 +409,20 @@ export default function PosClient({
         }`}
       >
         {!isVendor && (
-          <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
-            <h2 className="text-xl font-semibold mb-4">
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="mb-2 text-xl font-semibold">
               {editingId ? "Editar POS" : "Nuevo POS"}
             </h2>
 
+            <p className="mb-4 text-sm text-slate-500">
+              Este módulo es solo para alta y edición técnica del equipo. Las
+              asignaciones y cambios de estado se realizan únicamente desde el
+              módulo Asignaciones.
+            </p>
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm mb-1">Código interno</label>
+                <label className="mb-1 block text-sm">Código interno</label>
                 <input
                   type="text"
                   required
@@ -742,7 +434,7 @@ export default function PosClient({
               </div>
 
               <div>
-                <label className="block text-sm mb-1">Marca</label>
+                <label className="mb-1 block text-sm">Marca</label>
                 <input
                   type="text"
                   required
@@ -754,7 +446,7 @@ export default function PosClient({
               </div>
 
               <div>
-                <label className="block text-sm mb-1">Modelo</label>
+                <label className="mb-1 block text-sm">Modelo</label>
                 <input
                   type="text"
                   required
@@ -766,7 +458,7 @@ export default function PosClient({
               </div>
 
               <div>
-                <label className="block text-sm mb-1">Serial</label>
+                <label className="mb-1 block text-sm">Serial</label>
                 <input
                   type="text"
                   required
@@ -778,7 +470,7 @@ export default function PosClient({
               </div>
 
               <div>
-                <label className="block text-sm mb-1">IMEI 1</label>
+                <label className="mb-1 block text-sm">IMEI 1</label>
                 <input
                   type="text"
                   required
@@ -790,7 +482,7 @@ export default function PosClient({
               </div>
 
               <div>
-                <label className="block text-sm mb-1">IMEI 2</label>
+                <label className="mb-1 block text-sm">IMEI 2</label>
                 <input
                   type="text"
                   className="w-full rounded-md border px-3 py-2"
@@ -798,59 +490,6 @@ export default function PosClient({
                   onChange={(e) => handleChange("imei_2", e.target.value)}
                   placeholder="Ej: 987654321098765"
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm mb-1">Estado</label>
-                <select
-                  className="w-full rounded-md border px-3 py-2"
-                  value={formData.status}
-                  onChange={(e) => handleChange("status", e.target.value)}
-                >
-                  <option value="in_stock">En stock</option>
-                  <option value="assigned_vendor">Asignado a vendedor</option>
-                  <option value="assigned_merchant">Asignado a comercio</option>
-                  <option value="maintenance">Mantenimiento</option>
-                  <option value="inactive">Inactivo</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm mb-1">Vendedor asignado</label>
-                <select
-                  className="w-full rounded-md border px-3 py-2"
-                  value={formData.vendor_id}
-                  onChange={(e) => handleChange("vendor_id", e.target.value)}
-                  disabled={!!formData.merchant_id}
-                >
-                  <option value="">Seleccionar vendedor</option>
-                  {vendors.map((vendor) => (
-                    <option key={vendor.id} value={vendor.id}>
-                      {vendor.name || "Sin nombre"}
-                    </option>
-                  ))}
-                </select>
-                {formData.merchant_id && (
-                  <p className="mt-1 text-xs text-slate-500">
-                    El vendedor se toma automáticamente del comercio seleccionado.
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm mb-1">Comercio asignado</label>
-                <select
-                  className="w-full rounded-md border px-3 py-2"
-                  value={formData.merchant_id}
-                  onChange={(e) => handleChange("merchant_id", e.target.value)}
-                >
-                  <option value="">Seleccionar comercio</option>
-                  {merchants.map((merchant) => (
-                    <option key={merchant.id} value={merchant.id}>
-                      {merchant.name || "Sin nombre"}
-                    </option>
-                  ))}
-                </select>
               </div>
 
               <div className="flex gap-3">
@@ -880,8 +519,8 @@ export default function PosClient({
           </section>
         )}
 
-        <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200 h-[850px] flex flex-col">
-          <div className="flex items-center justify-between mb-4">
+        <section className="flex h-[850px] flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
             <div>
               <h2 className="text-xl font-semibold">
                 {isVendor ? "Mis POS asignados" : "Listado"}
@@ -901,30 +540,17 @@ export default function PosClient({
           </div>
 
           <div
-            className={`grid gap-3 mb-4 ${
-              isVendor ? "md:grid-cols-2 xl:grid-cols-3" : "md:grid-cols-2 xl:grid-cols-4"
+            className={`mb-4 grid gap-3 ${
+              isVendor ? "md:grid-cols-2" : "md:grid-cols-3"
             }`}
           >
             <input
               type="text"
               placeholder="Buscar por código, serial, IMEI..."
-              className="rounded-md border px-3 py-2 text-sm xl:col-span-2"
+              className="rounded-md border px-3 py-2 text-sm md:col-span-2"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-
-            <select
-              className="rounded-md border px-3 py-2 text-sm"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="">Todos los estados</option>
-              <option value="in_stock">En stock</option>
-              <option value="assigned_vendor">Asignado a vendedor</option>
-              <option value="assigned_merchant">Asignado a comercio</option>
-              <option value="maintenance">Mantenimiento</option>
-              <option value="inactive">Inactivo</option>
-            </select>
 
             <button
               type="button"
@@ -933,36 +559,6 @@ export default function PosClient({
             >
               Limpiar filtros
             </button>
-
-            {!isVendor && (
-              <>
-                <select
-                  className="rounded-md border px-3 py-2 text-sm"
-                  value={vendorFilter}
-                  onChange={(e) => setVendorFilter(e.target.value)}
-                >
-                  <option value="">Todos los vendedores</option>
-                  {vendors.map((vendor) => (
-                    <option key={vendor.id} value={vendor.id}>
-                      {vendor.name || "Sin nombre"}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  className="rounded-md border px-3 py-2 text-sm"
-                  value={merchantFilter}
-                  onChange={(e) => setMerchantFilter(e.target.value)}
-                >
-                  <option value="">Todos los comercios</option>
-                  {merchants.map((merchant) => (
-                    <option key={merchant.id} value={merchant.id}>
-                      {merchant.name || "Sin nombre"}
-                    </option>
-                  ))}
-                </select>
-              </>
-            )}
           </div>
 
           {filteredPosDevices.length === 0 ? (
@@ -972,9 +568,9 @@ export default function PosClient({
                 : "No hay POS para mostrar."}
             </p>
           ) : (
-            <div className="overflow-auto flex-1 rounded-xl border border-slate-200">
+            <div className="flex-1 overflow-auto rounded-xl border border-slate-200">
               <table className="min-w-full text-sm">
-                <thead className="sticky top-0 bg-slate-100 z-10">
+                <thead className="sticky top-0 z-10 bg-slate-100">
                   <tr className="text-left">
                     <th className="px-4 py-3">Código</th>
                     <th className="px-4 py-3">Marca</th>
@@ -982,9 +578,6 @@ export default function PosClient({
                     <th className="px-4 py-3">Serial</th>
                     <th className="px-4 py-3">IMEI 1</th>
                     <th className="px-4 py-3">IMEI 2</th>
-                    <th className="px-4 py-3">Estado</th>
-                    <th className="px-4 py-3">Vendedor</th>
-                    <th className="px-4 py-3">Comercio</th>
                     {!isVendor && <th className="px-4 py-3">Acciones</th>}
                   </tr>
                 </thead>
@@ -1000,21 +593,6 @@ export default function PosClient({
                       <td className="px-4 py-3">{pos.serial || "-"}</td>
                       <td className="px-4 py-3">{pos.imei || "-"}</td>
                       <td className="px-4 py-3">{pos.imei_2 || "-"}</td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(
-                            pos.status
-                          )}`}
-                        >
-                          {getStatusLabel(pos.status)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {getVendorName(pos.vendor_id)}
-                      </td>
-                      <td className="px-4 py-3">
-                        {getMerchantName(pos.merchant_id)}
-                      </td>
                       {!isVendor && (
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-2">
