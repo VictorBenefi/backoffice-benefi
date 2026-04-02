@@ -4,6 +4,17 @@ import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/client";
 
+type Vendor = {
+  id: string;
+  name: string | null;
+};
+
+type Merchant = {
+  id: string;
+  name: string | null;
+  vendor_id: string | null;
+};
+
 type PosDevice = {
   id: string;
   code: string | null;
@@ -12,6 +23,9 @@ type PosDevice = {
   serial: string | null;
   imei: string | null;
   imei_2: string | null;
+  status: string | null;
+  vendor_id: string | null;
+  merchant_id: string | null;
   created_at: string;
 };
 
@@ -32,6 +46,8 @@ export default function PosClient({
   const supabase = createClient();
 
   const [formData, setFormData] = useState(initialForm);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [posDevices, setPosDevices] = useState<PosDevice[]>([]);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
@@ -74,6 +90,36 @@ export default function PosClient({
     const role = data?.role || null;
     setCurrentRole(role);
     return role;
+  };
+
+  const loadVendors = async () => {
+    const { data, error } = await supabase
+      .from("vendors")
+      .select("id, name")
+      .order("name", { ascending: true });
+
+    if (error) {
+      console.error("Error al cargar vendedores:", error.message);
+      setVendors([]);
+      return;
+    }
+
+    setVendors((data as Vendor[]) || []);
+  };
+
+  const loadMerchants = async () => {
+    const { data, error } = await supabase
+      .from("merchants")
+      .select("id, name, vendor_id")
+      .order("name", { ascending: true });
+
+    if (error) {
+      console.error("Error al cargar comercios:", error.message);
+      setMerchants([]);
+      return;
+    }
+
+    setMerchants((data as Merchant[]) || []);
   };
 
   const loadPosDevices = async (userId: string, role?: string | null) => {
@@ -120,7 +166,9 @@ export default function PosClient({
 
       const { data, error } = await supabase
         .from("pos_devices")
-        .select("id, code, brand, model, serial, imei, imei_2, created_at")
+        .select(
+          "id, code, brand, model, serial, imei, imei_2, status, vendor_id, merchant_id, created_at"
+        )
         .in("merchant_id", merchantIds)
         .order("created_at", { ascending: false });
 
@@ -136,7 +184,9 @@ export default function PosClient({
 
     const { data, error } = await supabase
       .from("pos_devices")
-      .select("id, code, brand, model, serial, imei, imei_2, created_at")
+      .select(
+        "id, code, brand, model, serial, imei, imei_2, status, vendor_id, merchant_id, created_at"
+      )
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -165,7 +215,12 @@ export default function PosClient({
       setCurrentUserId(user.id);
 
       const role = await loadCurrentRole(user.id);
-      await loadPosDevices(user.id, role);
+
+      await Promise.all([
+        loadPosDevices(user.id, role),
+        loadVendors(),
+        loadMerchants(),
+      ]);
 
       setPageLoading(false);
     };
@@ -254,6 +309,52 @@ export default function PosClient({
     }
 
     return true;
+  };
+
+  const getVendorName = (vendorId: string | null) => {
+    if (!vendorId) return "-";
+    const vendor = vendors.find((v) => v.id === vendorId);
+    return vendor?.name || "-";
+  };
+
+  const getMerchantName = (merchantId: string | null) => {
+    if (!merchantId) return "-";
+    const merchant = merchants.find((m) => m.id === merchantId);
+    return merchant?.name || "-";
+  };
+
+  const getStatusLabel = (status: string | null) => {
+    switch (status) {
+      case "in_stock":
+        return "En stock";
+      case "assigned_vendor":
+        return "Asignado a vendedor";
+      case "assigned_merchant":
+        return "Asignado a comercio";
+      case "maintenance":
+        return "Mantenimiento";
+      case "inactive":
+        return "Inactivo";
+      default:
+        return status || "-";
+    }
+  };
+
+  const getStatusClass = (status: string | null) => {
+    switch (status) {
+      case "in_stock":
+        return "bg-emerald-100 text-emerald-700";
+      case "assigned_vendor":
+        return "bg-blue-100 text-blue-700";
+      case "assigned_merchant":
+        return "bg-violet-100 text-violet-700";
+      case "maintenance":
+        return "bg-amber-100 text-amber-700";
+      case "inactive":
+        return "bg-rose-100 text-rose-700";
+      default:
+        return "bg-slate-100 text-slate-700";
+    }
   };
 
   const reloadPos = async () => {
@@ -360,10 +461,13 @@ export default function PosClient({
         (pos.model || "").toLowerCase().includes(searchText) ||
         (pos.serial || "").toLowerCase().includes(searchText) ||
         (pos.imei || "").toLowerCase().includes(searchText) ||
-        (pos.imei_2 || "").toLowerCase().includes(searchText)
+        (pos.imei_2 || "").toLowerCase().includes(searchText) ||
+        getVendorName(pos.vendor_id).toLowerCase().includes(searchText) ||
+        getMerchantName(pos.merchant_id).toLowerCase().includes(searchText) ||
+        getStatusLabel(pos.status).toLowerCase().includes(searchText)
       );
     });
-  }, [posDevices, search]);
+  }, [posDevices, search, vendors, merchants]);
 
   const clearFilters = () => {
     setSearch("");
@@ -377,6 +481,9 @@ export default function PosClient({
       Serial: pos.serial || "",
       "IMEI 1": pos.imei || "",
       "IMEI 2": pos.imei_2 || "",
+      Estado: getStatusLabel(pos.status),
+      Vendedor: getVendorName(pos.vendor_id),
+      Comercio: getMerchantName(pos.merchant_id),
       "Fecha alta": pos.created_at
         ? new Date(pos.created_at).toLocaleString("es-AR")
         : "",
@@ -546,7 +653,7 @@ export default function PosClient({
           >
             <input
               type="text"
-              placeholder="Buscar por código, serial, IMEI..."
+              placeholder="Buscar por código, serial, IMEI, vendedor, comercio o estado..."
               className="rounded-md border px-3 py-2 text-sm md:col-span-2"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -578,6 +685,9 @@ export default function PosClient({
                     <th className="px-4 py-3">Serial</th>
                     <th className="px-4 py-3">IMEI 1</th>
                     <th className="px-4 py-3">IMEI 2</th>
+                    <th className="px-4 py-3">Estado</th>
+                    <th className="px-4 py-3">Vendedor</th>
+                    <th className="px-4 py-3">Comercio</th>
                     {!isVendor && <th className="px-4 py-3">Acciones</th>}
                   </tr>
                 </thead>
@@ -593,6 +703,21 @@ export default function PosClient({
                       <td className="px-4 py-3">{pos.serial || "-"}</td>
                       <td className="px-4 py-3">{pos.imei || "-"}</td>
                       <td className="px-4 py-3">{pos.imei_2 || "-"}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(
+                            pos.status
+                          )}`}
+                        >
+                          {getStatusLabel(pos.status)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {getVendorName(pos.vendor_id)}
+                      </td>
+                      <td className="px-4 py-3">
+                        {getMerchantName(pos.merchant_id)}
+                      </td>
                       {!isVendor && (
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-2">
