@@ -70,21 +70,25 @@ export default function PosClient({
 
   const isVendor = currentRole === "vendedor";
 
-  const loadCurrentRole = async () => {
+  const getCurrentUser = async () => {
     const {
       data: { user },
-      error: authError,
+      error,
     } = await supabase.auth.getUser();
 
-    if (authError || !user?.id) {
-      setCurrentRole(null);
-      return;
+    if (error) {
+      console.error("Error obteniendo usuario actual:", error.message);
+      return null;
     }
 
+    return user;
+  };
+
+  const loadCurrentRole = async (userId: string) => {
     const { data, error } = await supabase
       .from("app_users")
       .select("role")
-      .eq("auth_user_id", user.id)
+      .eq("auth_user_id", userId)
       .maybeSingle();
 
     if (error) {
@@ -104,6 +108,7 @@ export default function PosClient({
 
     if (error) {
       console.error("Error al cargar vendedores:", error.message);
+      setVendors([]);
       return;
     }
 
@@ -118,26 +123,18 @@ export default function PosClient({
 
     if (error) {
       console.error("Error al cargar comercios:", error.message);
+      setMerchants([]);
       return;
     }
 
     setMerchants(data || []);
   };
 
-  const loadPosDevices = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user?.id) {
-      setPosDevices([]);
-      return;
-    }
-
+  const loadPosDevices = async (userId: string) => {
     const { data: appUser, error: appUserError } = await supabase
       .from("app_users")
       .select("role")
-      .eq("auth_user_id", user.id)
+      .eq("auth_user_id", userId)
       .maybeSingle();
 
     if (appUserError) {
@@ -150,7 +147,7 @@ export default function PosClient({
       const { data: vendor, error: vendorError } = await supabase
         .from("vendors")
         .select("id")
-        .eq("auth_user_id", user.id)
+        .eq("auth_user_id", userId)
         .maybeSingle();
 
       if (vendorError) {
@@ -170,7 +167,10 @@ export default function PosClient({
         .eq("vendor_id", vendor.id);
 
       if (merchantError) {
-        console.error("Error al obtener comercios del vendedor:", merchantError.message);
+        console.error(
+          "Error al obtener comercios del vendedor:",
+          merchantError.message
+        );
         setPosDevices([]);
         return;
       }
@@ -213,10 +213,22 @@ export default function PosClient({
   };
 
   useEffect(() => {
-    loadCurrentRole();
-    loadVendors();
-    loadMerchants();
-    loadPosDevices();
+    const init = async () => {
+      const user = await getCurrentUser();
+
+      if (!user?.id) {
+        setCurrentRole(null);
+        setPosDevices([]);
+        return;
+      }
+
+      await loadCurrentRole(user.id);
+      await loadVendors();
+      await loadMerchants();
+      await loadPosDevices(user.id);
+    };
+
+    init();
   }, []);
 
   const handleChange = (field: keyof typeof initialForm, value: string) => {
@@ -364,12 +376,9 @@ export default function PosClient({
   };
 
   const getCurrentAuditUser = async (): Promise<AppUser | null> => {
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
-    if (authError || !user?.email) {
+    if (!user?.email) {
       return null;
     }
 
@@ -432,7 +441,10 @@ export default function PosClient({
       resetForm();
     }
 
-    await loadPosDevices();
+    const user = await getCurrentUser();
+    if (user?.id) {
+      await loadPosDevices(user.id);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -515,7 +527,10 @@ export default function PosClient({
             `POS actualizado, pero falló el movimiento: ${movementError.message}`
           );
           console.error(movementError);
-          await loadPosDevices();
+          const user = await getCurrentUser();
+          if (user?.id) {
+            await loadPosDevices(user.id);
+          }
           resetForm();
           return;
         }
@@ -523,7 +538,10 @@ export default function PosClient({
 
       setLoading(false);
       resetForm();
-      await loadPosDevices();
+      const user = await getCurrentUser();
+      if (user?.id) {
+        await loadPosDevices(user.id);
+      }
       return;
     }
 
@@ -591,13 +609,19 @@ export default function PosClient({
     if (movementError) {
       alert(`POS guardado, pero falló el movimiento: ${movementError.message}`);
       console.error(movementError);
-      await loadPosDevices();
+      const user = await getCurrentUser();
+      if (user?.id) {
+        await loadPosDevices(user.id);
+      }
       resetForm();
       return;
     }
 
     resetForm();
-    await loadPosDevices();
+    const user = await getCurrentUser();
+    if (user?.id) {
+      await loadPosDevices(user.id);
+    }
   };
 
   const filteredPosDevices = useMemo(() => {
@@ -657,7 +681,11 @@ export default function PosClient({
     <main className="min-h-screen bg-gray-50 p-6">
       <h1 className="text-3xl font-bold mb-6">POS / Terminales</h1>
 
-      <div className={`grid gap-6 ${isVendor ? "grid-cols-1" : "md:grid-cols-[420px_1fr]"}`}>
+      <div
+        className={`grid gap-6 ${
+          isVendor ? "grid-cols-1" : "md:grid-cols-[420px_1fr]"
+        }`}
+      >
         {!isVendor && (
           <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
             <h2 className="text-xl font-semibold mb-4">
@@ -830,11 +858,15 @@ export default function PosClient({
             </button>
           </div>
 
-          <div className={`grid gap-3 mb-4 ${isVendor ? "md:grid-cols-2 xl:grid-cols-3" : "md:grid-cols-2 xl:grid-cols-4"}`}>
+          <div
+            className={`grid gap-3 mb-4 ${
+              isVendor ? "md:grid-cols-2 xl:grid-cols-3" : "md:grid-cols-2 xl:grid-cols-4"
+            }`}
+          >
             <input
               type="text"
               placeholder="Buscar por código, serial, IMEI..."
-              className={`rounded-md border px-3 py-2 text-sm ${isVendor ? "xl:col-span-2" : "xl:col-span-2"}`}
+              className="rounded-md border px-3 py-2 text-sm xl:col-span-2"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -935,12 +967,8 @@ export default function PosClient({
                           {getStatusLabel(pos.status)}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
-                        {getVendorName(pos.vendor_id)}
-                      </td>
-                      <td className="px-4 py-3">
-                        {getMerchantName(pos.merchant_id)}
-                      </td>
+                      <td className="px-4 py-3">{getVendorName(pos.vendor_id)}</td>
+                      <td className="px-4 py-3">{getMerchantName(pos.merchant_id)}</td>
                       {!isVendor && (
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-2">
