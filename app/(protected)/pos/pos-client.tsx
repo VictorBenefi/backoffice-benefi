@@ -59,9 +59,11 @@ export default function PosClient({
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [posDevices, setPosDevices] = useState<PosDevice[]>([]);
   const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [currentRole, setCurrentRole] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -94,10 +96,12 @@ export default function PosClient({
     if (error) {
       console.error("Error al cargar rol actual:", error.message);
       setCurrentRole(null);
-      return;
+      return null;
     }
 
-    setCurrentRole(data?.role || null);
+    const role = data?.role || null;
+    setCurrentRole(role);
+    return role;
   };
 
   const loadVendors = async () => {
@@ -130,20 +134,10 @@ export default function PosClient({
     setMerchants(data || []);
   };
 
-  const loadPosDevices = async (userId: string) => {
-    const { data: appUser, error: appUserError } = await supabase
-      .from("app_users")
-      .select("role")
-      .eq("auth_user_id", userId)
-      .maybeSingle();
+  const loadPosDevices = async (userId: string, role?: string | null) => {
+    const effectiveRole = role ?? currentRole;
 
-    if (appUserError) {
-      console.error("Error al obtener rol del usuario:", appUserError.message);
-      setPosDevices([]);
-      return;
-    }
-
-    if (appUser?.role === "vendedor") {
+    if (effectiveRole === "vendedor") {
       const { data: vendor, error: vendorError } = await supabase
         .from("vendors")
         .select("id")
@@ -214,18 +208,29 @@ export default function PosClient({
 
   useEffect(() => {
     const init = async () => {
+      setPageLoading(true);
+
       const user = await getCurrentUser();
 
       if (!user?.id) {
         setCurrentRole(null);
+        setCurrentUserId(null);
         setPosDevices([]);
+        setPageLoading(false);
         return;
       }
 
-      await loadCurrentRole(user.id);
-      await loadVendors();
-      await loadMerchants();
-      await loadPosDevices(user.id);
+      setCurrentUserId(user.id);
+
+      const role = await loadCurrentRole(user.id);
+
+      // Primero cargamos lo importante
+      await loadPosDevices(user.id, role);
+
+      // Después lo secundario
+      await Promise.all([loadVendors(), loadMerchants()]);
+
+      setPageLoading(false);
     };
 
     init();
@@ -410,6 +415,11 @@ export default function PosClient({
     return data;
   };
 
+  const reloadPos = async () => {
+    if (!currentUserId) return;
+    await loadPosDevices(currentUserId, currentRole);
+  };
+
   const handleEdit = (pos: PosDevice) => {
     setEditingId(pos.id);
     setFormData({
@@ -441,10 +451,7 @@ export default function PosClient({
       resetForm();
     }
 
-    const user = await getCurrentUser();
-    if (user?.id) {
-      await loadPosDevices(user.id);
-    }
+    await reloadPos();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -527,10 +534,7 @@ export default function PosClient({
             `POS actualizado, pero falló el movimiento: ${movementError.message}`
           );
           console.error(movementError);
-          const user = await getCurrentUser();
-          if (user?.id) {
-            await loadPosDevices(user.id);
-          }
+          await reloadPos();
           resetForm();
           return;
         }
@@ -538,10 +542,7 @@ export default function PosClient({
 
       setLoading(false);
       resetForm();
-      const user = await getCurrentUser();
-      if (user?.id) {
-        await loadPosDevices(user.id);
-      }
+      await reloadPos();
       return;
     }
 
@@ -609,19 +610,13 @@ export default function PosClient({
     if (movementError) {
       alert(`POS guardado, pero falló el movimiento: ${movementError.message}`);
       console.error(movementError);
-      const user = await getCurrentUser();
-      if (user?.id) {
-        await loadPosDevices(user.id);
-      }
+      await reloadPos();
       resetForm();
       return;
     }
 
     resetForm();
-    const user = await getCurrentUser();
-    if (user?.id) {
-      await loadPosDevices(user.id);
-    }
+    await reloadPos();
   };
 
   const filteredPosDevices = useMemo(() => {
@@ -676,6 +671,17 @@ export default function PosClient({
     XLSX.utils.book_append_sheet(workbook, worksheet, "POS");
     XLSX.writeFile(workbook, "listado_pos.xlsx");
   };
+
+  if (pageLoading) {
+    return (
+      <main className="min-h-screen bg-gray-50 p-6">
+        <h1 className="text-3xl font-bold mb-6">POS / Terminales</h1>
+        <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
+          <p className="text-gray-500">Cargando POS...</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gray-50 p-6">
@@ -967,8 +973,12 @@ export default function PosClient({
                           {getStatusLabel(pos.status)}
                         </span>
                       </td>
-                      <td className="px-4 py-3">{getVendorName(pos.vendor_id)}</td>
-                      <td className="px-4 py-3">{getMerchantName(pos.merchant_id)}</td>
+                      <td className="px-4 py-3">
+                        {getVendorName(pos.vendor_id)}
+                      </td>
+                      <td className="px-4 py-3">
+                        {getMerchantName(pos.merchant_id)}
+                      </td>
                       {!isVendor && (
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-2">
