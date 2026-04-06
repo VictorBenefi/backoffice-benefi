@@ -159,18 +159,23 @@ export default function PosClient({
 
       const merchantIds = merchantRows?.map((m) => m.id) || [];
 
-      if (merchantIds.length === 0) {
-        setPosDevices([]);
-        return;
-      }
-
-      const { data, error } = await supabase
+      let query = supabase
         .from("pos_devices")
         .select(
           "id, code, brand, model, serial, imei, imei_2, status, vendor_id, merchant_id, created_at"
         )
-        .in("merchant_id", merchantIds)
         .order("created_at", { ascending: false });
+
+      if (merchantIds.length > 0) {
+        const merchantFilter = merchantIds
+          .map((id) => `merchant_id.eq.${id}`)
+          .join(",");
+        query = query.or(`vendor_id.eq.${vendor.id},${merchantFilter}`);
+      } else {
+        query = query.eq("vendor_id", vendor.id);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error("Error al cargar POS del vendedor:", error.message);
