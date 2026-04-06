@@ -29,6 +29,14 @@ type PosDevice = {
   created_at: string;
 };
 
+type Installation = {
+  id: string;
+  pos_id: string | null;
+  status: string;
+  install_date: string | null;
+  created_at: string;
+};
+
 const initialForm = {
   code: "",
   brand: "",
@@ -48,6 +56,7 @@ export default function PosClient({
   const [formData, setFormData] = useState(initialForm);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
+  const [installations, setInstallations] = useState<Installation[]>([]);
   const [posDevices, setPosDevices] = useState<PosDevice[]>([]);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
@@ -120,6 +129,21 @@ export default function PosClient({
     }
 
     setMerchants((data as Merchant[]) || []);
+  };
+
+  const loadInstallations = async () => {
+    const { data, error } = await supabase
+      .from("installations")
+      .select("id, pos_id, status, install_date, created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error al cargar instalaciones:", error.message);
+      setInstallations([]);
+      return;
+    }
+
+    setInstallations((data as Installation[]) || []);
   };
 
   const loadPosDevices = async (userId: string, role?: string | null) => {
@@ -213,6 +237,7 @@ export default function PosClient({
         setCurrentRole(null);
         setCurrentUserId(null);
         setPosDevices([]);
+        setInstallations([]);
         setPageLoading(false);
         return;
       }
@@ -225,6 +250,7 @@ export default function PosClient({
         loadPosDevices(user.id, role),
         loadVendors(),
         loadMerchants(),
+        loadInstallations(),
       ]);
 
       setPageLoading(false);
@@ -362,9 +388,46 @@ export default function PosClient({
     }
   };
 
+  const getLatestInstallationForPos = (posId: string) => {
+    return installations.find((installation) => installation.pos_id === posId) || null;
+  };
+
+  const getInstallationStatusLabel = (status: string | null) => {
+    switch (status) {
+      case "pending":
+        return "Pendiente";
+      case "in_progress":
+        return "En proceso";
+      case "completed":
+        return "Completada";
+      case "cancelled":
+        return "Cancelada";
+      default:
+        return "-";
+    }
+  };
+
+  const getInstallationStatusClass = (status: string | null) => {
+    switch (status) {
+      case "pending":
+        return "bg-amber-100 text-amber-700";
+      case "in_progress":
+        return "bg-blue-100 text-blue-700";
+      case "completed":
+        return "bg-emerald-100 text-emerald-700";
+      case "cancelled":
+        return "bg-rose-100 text-rose-700";
+      default:
+        return "bg-slate-100 text-slate-700";
+    }
+  };
+
   const reloadPos = async () => {
     if (!currentUserId) return;
-    await loadPosDevices(currentUserId, currentRole);
+    await Promise.all([
+      loadPosDevices(currentUserId, currentRole),
+      loadInstallations(),
+    ]);
   };
 
   const handleEdit = (pos: PosDevice) => {
@@ -459,6 +522,11 @@ export default function PosClient({
     const searchText = search.trim().toLowerCase();
 
     return posDevices.filter((pos) => {
+      const latestInstallation = getLatestInstallationForPos(pos.id);
+      const installationLabel = getInstallationStatusLabel(
+        latestInstallation?.status || null
+      ).toLowerCase();
+
       return (
         !searchText ||
         (pos.code || "").toLowerCase().includes(searchText) ||
@@ -469,30 +537,37 @@ export default function PosClient({
         (pos.imei_2 || "").toLowerCase().includes(searchText) ||
         getVendorName(pos.vendor_id).toLowerCase().includes(searchText) ||
         getMerchantName(pos.merchant_id).toLowerCase().includes(searchText) ||
-        getStatusLabel(pos.status).toLowerCase().includes(searchText)
+        getStatusLabel(pos.status).toLowerCase().includes(searchText) ||
+        installationLabel.includes(searchText)
       );
     });
-  }, [posDevices, search, vendors, merchants]);
+  }, [posDevices, search, vendors, merchants, installations]);
 
   const clearFilters = () => {
     setSearch("");
   };
 
   const handleExportExcel = () => {
-    const exportData = filteredPosDevices.map((pos) => ({
-      Codigo: pos.code || "",
-      Marca: pos.brand || "",
-      Modelo: pos.model || "",
-      Serial: pos.serial || "",
-      "IMEI 1": pos.imei || "",
-      "IMEI 2": pos.imei_2 || "",
-      Estado: getStatusLabel(pos.status),
-      Vendedor: getVendorName(pos.vendor_id),
-      Comercio: getMerchantName(pos.merchant_id),
-      "Fecha alta": pos.created_at
-        ? new Date(pos.created_at).toLocaleString("es-AR")
-        : "",
-    }));
+    const exportData = filteredPosDevices.map((pos) => {
+      const latestInstallation = getLatestInstallationForPos(pos.id);
+
+      return {
+        Codigo: pos.code || "",
+        Marca: pos.brand || "",
+        Modelo: pos.model || "",
+        Serial: pos.serial || "",
+        "IMEI 1": pos.imei || "",
+        "IMEI 2": pos.imei_2 || "",
+        Estado: getStatusLabel(pos.status),
+        Instalacion: getInstallationStatusLabel(latestInstallation?.status || null),
+        "Fecha instalacion": latestInstallation?.install_date || "",
+        Vendedor: getVendorName(pos.vendor_id),
+        Comercio: getMerchantName(pos.merchant_id),
+        "Fecha alta": pos.created_at
+          ? new Date(pos.created_at).toLocaleString("es-AR")
+          : "",
+      };
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const workbook = XLSX.utils.book_new();
@@ -658,7 +733,7 @@ export default function PosClient({
           >
             <input
               type="text"
-              placeholder="Buscar por código, serial, IMEI, vendedor, comercio o estado..."
+              placeholder="Buscar por código, serial, IMEI, vendedor, comercio, estado o instalación..."
               className="rounded-md border px-3 py-2 text-sm md:col-span-2"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -691,6 +766,7 @@ export default function PosClient({
                     <th className="px-4 py-3">IMEI 1</th>
                     <th className="px-4 py-3">IMEI 2</th>
                     <th className="px-4 py-3">Estado</th>
+                    <th className="px-4 py-3">Instalación</th>
                     <th className="px-4 py-3">Vendedor</th>
                     <th className="px-4 py-3">Comercio</th>
                     {!isVendor && <th className="px-4 py-3">Acciones</th>}
@@ -698,54 +774,69 @@ export default function PosClient({
                 </thead>
 
                 <tbody>
-                  {filteredPosDevices.map((pos) => (
-                    <tr key={pos.id} className="border-t align-top">
-                      <td className="px-4 py-3 font-medium">
-                        {pos.code || "-"}
-                      </td>
-                      <td className="px-4 py-3">{pos.brand || "-"}</td>
-                      <td className="px-4 py-3">{pos.model || "-"}</td>
-                      <td className="px-4 py-3">{pos.serial || "-"}</td>
-                      <td className="px-4 py-3">{pos.imei || "-"}</td>
-                      <td className="px-4 py-3">{pos.imei_2 || "-"}</td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(
-                            pos.status
-                          )}`}
-                        >
-                          {getStatusLabel(pos.status)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {getVendorName(pos.vendor_id)}
-                      </td>
-                      <td className="px-4 py-3">
-                        {getMerchantName(pos.merchant_id)}
-                      </td>
-                      {!isVendor && (
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              onClick={() => handleEdit(pos)}
-                              className="rounded-md bg-blue-600 px-3 py-1 text-xs text-white"
-                            >
-                              Editar
-                            </button>
+                  {filteredPosDevices.map((pos) => {
+                    const latestInstallation = getLatestInstallationForPos(pos.id);
 
-                            {canDeletePos && (
-                              <button
-                                onClick={() => handleDelete(pos.id)}
-                                className="rounded-md bg-red-600 px-3 py-1 text-xs text-white"
-                              >
-                                Eliminar
-                              </button>
-                            )}
-                          </div>
+                    return (
+                      <tr key={pos.id} className="border-t align-top">
+                        <td className="px-4 py-3 font-medium">
+                          {pos.code || "-"}
                         </td>
-                      )}
-                    </tr>
-                  ))}
+                        <td className="px-4 py-3">{pos.brand || "-"}</td>
+                        <td className="px-4 py-3">{pos.model || "-"}</td>
+                        <td className="px-4 py-3">{pos.serial || "-"}</td>
+                        <td className="px-4 py-3">{pos.imei || "-"}</td>
+                        <td className="px-4 py-3">{pos.imei_2 || "-"}</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(
+                              pos.status
+                            )}`}
+                          >
+                            {getStatusLabel(pos.status)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getInstallationStatusClass(
+                              latestInstallation?.status || null
+                            )}`}
+                          >
+                            {getInstallationStatusLabel(
+                              latestInstallation?.status || null
+                            )}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {getVendorName(pos.vendor_id)}
+                        </td>
+                        <td className="px-4 py-3">
+                          {getMerchantName(pos.merchant_id)}
+                        </td>
+                        {!isVendor && (
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                onClick={() => handleEdit(pos)}
+                                className="rounded-md bg-blue-600 px-3 py-1 text-xs text-white"
+                              >
+                                Editar
+                              </button>
+
+                              {canDeletePos && (
+                                <button
+                                  onClick={() => handleDelete(pos.id)}
+                                  className="rounded-md bg-red-600 px-3 py-1 text-xs text-white"
+                                >
+                                  Eliminar
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
