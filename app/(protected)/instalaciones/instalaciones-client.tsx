@@ -203,10 +203,7 @@ export default function InstalacionesClient() {
 
   const hasActiveInstallation = (posId: string) => {
     return installations.some(
-      (i) =>
-        i.pos_id === posId &&
-        i.id !== editingId &&
-        i.status !== "cancelled"
+      (i) => i.pos_id === posId && i.id !== editingId && i.status !== "cancelled"
     );
   };
 
@@ -216,8 +213,7 @@ export default function InstalacionesClient() {
     return posDevices.filter((p) => {
       const sameVendor = p.vendor_id === vendorId;
 
-      const assignedToVendor =
-        p.status === "assigned_vendor" && sameVendor;
+      const assignedToVendor = p.status === "assigned_vendor" && sameVendor;
 
       const assignedToThisMerchant =
         p.status === "assigned_merchant" &&
@@ -333,6 +329,13 @@ export default function InstalacionesClient() {
 
     if (!formData.pos_id) {
       alert("Debés seleccionar un POS.");
+      return;
+    }
+
+    if (formData.status === "completed" && !formData.install_date) {
+      alert(
+        "Si la instalación está completada, debés indicar la fecha de instalación."
+      );
       return;
     }
 
@@ -680,9 +683,7 @@ export default function InstalacionesClient() {
                   POS actualmente asignados al comercio:{" "}
                   {assignedMerchantPosList.length}
                 </p>
-                <p>
-                  POS elegibles para instalación: {eligiblePosList.length}
-                </p>
+                <p>POS elegibles para instalación: {eligiblePosList.length}</p>
               </div>
             )}
 
@@ -723,19 +724,24 @@ export default function InstalacionesClient() {
 
               {!editingId && eligiblePosList.length === 0 && (
                 <p className="mt-1 text-xs text-rose-600">
-                  No hay POS elegibles para este comercio. El POS debe estar previamente asignado al vendedor del comercio o al mismo comercio.
+                  No hay POS elegibles para este comercio. El POS debe estar
+                  previamente asignado al vendedor del comercio o al mismo
+                  comercio.
                 </p>
               )}
 
               {!editingId && formData.merchant_id && eligiblePosList.length > 0 && (
                 <p className="mt-1 text-xs text-slate-500">
-                  Se muestran solo POS del vendedor del comercio y también POS ya asignados a este comercio que todavía no tengan instalación activa.
+                  Se muestran solo POS del vendedor del comercio y también POS
+                  ya asignados a este comercio que todavía no tengan instalación
+                  activa.
                 </p>
               )}
 
               {editingId && (
                 <p className="mt-1 text-xs text-slate-500">
-                  En edición podés cambiar estado, fecha y notas sin modificar el POS asignado.
+                  En edición podés cambiar estado, fecha y notas sin modificar
+                  el POS asignado.
                 </p>
               )}
             </div>
@@ -755,9 +761,12 @@ export default function InstalacionesClient() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm">Fecha de instalación</label>
+              <label className="mb-1 block text-sm">
+                Fecha de instalación {formData.status === "completed" ? "*" : ""}
+              </label>
               <input
                 type="date"
+                required={formData.status === "completed"}
                 className="w-full rounded-md border px-3 py-2"
                 value={formData.install_date}
                 onChange={(e) => handleChange("install_date", e.target.value)}
