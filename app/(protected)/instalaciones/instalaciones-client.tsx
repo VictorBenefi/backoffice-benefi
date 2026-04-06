@@ -85,30 +85,31 @@ export default function InstalacionesClient() {
         installationsRes.error.message
       );
     } else {
-      setInstallations(installationsRes.data || []);
+      setInstallations((installationsRes.data as Installation[]) || []);
     }
 
     if (merchantsRes.error) {
       console.error("Error al cargar comercios:", merchantsRes.error.message);
     } else {
-      setMerchants(merchantsRes.data || []);
+      setMerchants((merchantsRes.data as Merchant[]) || []);
     }
 
     if (vendorsRes.error) {
       console.error("Error al cargar vendedores:", vendorsRes.error.message);
     } else {
-      setVendors(vendorsRes.data || []);
+      setVendors((vendorsRes.data as Vendor[]) || []);
     }
 
     if (posRes.error) {
       console.error("Error al cargar POS:", posRes.error.message);
     } else {
-      setPosDevices(posRes.data || []);
+      setPosDevices((posRes.data as PosDevice[]) || []);
     }
   };
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const getCurrentAuditUser = async (): Promise<AppUser | null> => {
@@ -164,65 +165,6 @@ export default function InstalacionesClient() {
     return posDevices.find((p) => p.id === posId)?.code || "-";
   };
 
-  const getAssignedMerchantPosList = (merchantId: string) => {
-    return posDevices.filter(
-      (p) =>
-        p.merchant_id === merchantId && p.status === "assigned_merchant"
-    );
-  };
-
-  const getAvailablePosList = () => {
-    return posDevices.filter((p) => p.status === "in_stock");
-  };
-
-  const getSelectablePosList = () => {
-    const available = getAvailablePosList();
-
-    if (!editingId || !formData.pos_id) {
-      return available;
-    }
-
-    const currentPos = posDevices.find((p) => p.id === formData.pos_id);
-    if (!currentPos) return available;
-
-    const exists = available.some((p) => p.id === currentPos.id);
-    if (exists) return available;
-
-    return [currentPos, ...available];
-  };
-
-  const handleMerchantChange = (merchantId: string) => {
-    const selectedMerchant = merchants.find((m) => m.id === merchantId);
-    const assignedMerchantPosList = getAssignedMerchantPosList(merchantId);
-
-    const resolvedVendorId =
-      selectedMerchant?.vendor_id || assignedMerchantPosList[0]?.vendor_id || "";
-
-    setFormData((prev) => ({
-      ...prev,
-      merchant_id: merchantId,
-      vendor_id: resolvedVendorId,
-      pos_id: "",
-    }));
-  };
-
-  const handleChange = (field: keyof typeof initialForm, value: string) => {
-    if (field === "merchant_id" && !editingId) {
-      handleMerchantChange(value);
-      return;
-    }
-
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
-
-  const resetForm = () => {
-    setFormData(initialForm);
-    setEditingId(null);
-  };
-
   const getStatusLabel = (status: string) => {
     switch (status) {
       case "pending":
@@ -251,6 +193,85 @@ export default function InstalacionesClient() {
       default:
         return "bg-slate-100 text-slate-700";
     }
+  };
+
+  const getAssignedMerchantPosList = (merchantId: string) => {
+    return posDevices.filter(
+      (p) => p.merchant_id === merchantId && p.status === "assigned_merchant"
+    );
+  };
+
+  const getInstallationsForPos = (posId: string) => {
+    return installations.filter((i) => i.pos_id === posId);
+  };
+
+  const hasActiveInstallation = (posId: string) => {
+    return installations.some(
+      (i) =>
+        i.pos_id === posId &&
+        i.id !== editingId &&
+        i.status !== "cancelled"
+    );
+  };
+
+  const getAvailablePosList = () => {
+    if (!formData.merchant_id) return [];
+
+    return posDevices.filter((p) => {
+      const isInStock = p.status === "in_stock";
+      const isAssignedToThisMerchant =
+        p.status === "assigned_merchant" && p.merchant_id === formData.merchant_id;
+
+      if (!isInStock && !isAssignedToThisMerchant) return false;
+      if (hasActiveInstallation(p.id)) return false;
+
+      return true;
+    });
+  };
+
+  const getSelectablePosList = () => {
+    const available = getAvailablePosList();
+
+    if (!editingId || !formData.pos_id) {
+      return available;
+    }
+
+    const currentPos = posDevices.find((p) => p.id === formData.pos_id);
+    if (!currentPos) return available;
+
+    const exists = available.some((p) => p.id === currentPos.id);
+    if (exists) return available;
+
+    return [currentPos, ...available];
+  };
+
+  const handleMerchantChange = (merchantId: string) => {
+    const selectedMerchant = merchants.find((m) => m.id === merchantId);
+    const resolvedVendorId = selectedMerchant?.vendor_id || "";
+
+    setFormData((prev) => ({
+      ...prev,
+      merchant_id: merchantId,
+      vendor_id: resolvedVendorId,
+      pos_id: "",
+    }));
+  };
+
+  const handleChange = (field: keyof typeof initialForm, value: string) => {
+    if (field === "merchant_id" && !editingId) {
+      handleMerchantChange(value);
+      return;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const resetForm = () => {
+    setFormData(initialForm);
+    setEditingId(null);
   };
 
   const insertMovement = async ({
@@ -317,9 +338,23 @@ export default function InstalacionesClient() {
       return;
     }
 
-    if (!editingId && selectedPos.status !== "in_stock") {
-      alert("El POS seleccionado ya no está disponible.");
-      return;
+    if (!editingId) {
+      const canUsePos =
+        selectedPos.status === "in_stock" ||
+        (selectedPos.status === "assigned_merchant" &&
+          selectedPos.merchant_id === formData.merchant_id);
+
+      if (!canUsePos) {
+        alert(
+          "El POS seleccionado no está disponible para este comercio."
+        );
+        return;
+      }
+
+      if (hasActiveInstallation(selectedPos.id)) {
+        alert("El POS seleccionado ya tiene una instalación activa.");
+        return;
+      }
     }
 
     setLoading(true);
@@ -460,49 +495,55 @@ export default function InstalacionesClient() {
       return;
     }
 
-    const { error: posUpdateError } = await supabase
-      .from("pos_devices")
-      .update({
-        status: "assigned_merchant",
-        merchant_id: formData.merchant_id,
-        vendor_id: formData.vendor_id,
-      })
-      .eq("id", formData.pos_id);
+    const needsPosAssignment =
+      selectedPos.status !== "assigned_merchant" ||
+      selectedPos.merchant_id !== formData.merchant_id ||
+      selectedPos.vendor_id !== formData.vendor_id;
 
-    if (posUpdateError) {
-      setLoading(false);
-      alert(
-        `La instalación se guardó, pero falló la asignación del POS: ${posUpdateError.message}`
-      );
-      console.error(posUpdateError);
-      await loadData();
-      resetForm();
-      return;
+    if (needsPosAssignment) {
+      const { error: posUpdateError } = await supabase
+        .from("pos_devices")
+        .update({
+          status: "assigned_merchant",
+          merchant_id: formData.merchant_id,
+          vendor_id: formData.vendor_id,
+        })
+        .eq("id", formData.pos_id);
+
+      if (posUpdateError) {
+        setLoading(false);
+        alert(
+          `La instalación se guardó, pero falló la asignación del POS: ${posUpdateError.message}`
+        );
+        console.error(posUpdateError);
+        await loadData();
+        resetForm();
+        return;
+      }
+
+      const { error: assignMovementError } = await insertMovement({
+        posId: formData.pos_id,
+        posCode: selectedPos.code || null,
+        type: "asignado_comercio",
+        vendorId: formData.vendor_id || null,
+        vendorName: selectedVendorName,
+        merchantId: formData.merchant_id || null,
+        merchantName: selectedMerchantName,
+        notes: "Asignación desde instalaciones",
+      });
+
+      if (assignMovementError) {
+        setLoading(false);
+        alert(
+          `La instalación y el POS se guardaron, pero falló el movimiento: ${assignMovementError.message}`
+        );
+        console.error(assignMovementError);
+        await loadData();
+        resetForm();
+        return;
+      }
     }
 
-    const { error: assignMovementError } = await insertMovement({
-      posId: formData.pos_id,
-      posCode: selectedPos.code || null,
-      type: "asignado_comercio",
-      vendorId: formData.vendor_id || null,
-      vendorName: selectedVendorName,
-      merchantId: formData.merchant_id || null,
-      merchantName: selectedMerchantName,
-      notes: "Asignación desde instalaciones",
-    });
-
-    if (assignMovementError) {
-      setLoading(false);
-      alert(
-        `La instalación y el POS se guardaron, pero falló el movimiento: ${assignMovementError.message}`
-      );
-      console.error(assignMovementError);
-      await loadData();
-      resetForm();
-      return;
-    }
-
-    // NUEVO: si nace directamente como completada, registrar auditoría también
     if (formData.status === "completed") {
       const { error: completedMovementError } = await insertMovement({
         posId: formData.pos_id,
@@ -596,17 +637,17 @@ export default function InstalacionesClient() {
 
   return (
     <main className="min-h-screen bg-gray-50 p-6">
-      <h1 className="text-3xl font-bold mb-6">Instalaciones</h1>
+      <h1 className="mb-6 text-3xl font-bold">Instalaciones</h1>
 
       <div className="grid gap-6 md:grid-cols-2">
         <section className="rounded-xl bg-white p-6 shadow">
-          <h2 className="text-xl font-semibold mb-4">
+          <h2 className="mb-4 text-xl font-semibold">
             {editingId ? "Editar instalación" : "Nueva instalación"}
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm mb-1">Comercio</label>
+              <label className="mb-1 block text-sm">Comercio</label>
               <select
                 className="w-full rounded-md border px-3 py-2"
                 value={formData.merchant_id}
@@ -623,7 +664,7 @@ export default function InstalacionesClient() {
             </div>
 
             {formData.merchant_id && (
-              <div className="rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-sm text-slate-700 space-y-1">
+              <div className="space-y-1 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
                 <p>Vendedor asignado: {getVendorName(formData.vendor_id)}</p>
                 <p>
                   POS actualmente asignados al comercio:{" "}
@@ -636,7 +677,7 @@ export default function InstalacionesClient() {
             )}
 
             <div>
-              <label className="block text-sm mb-1">Vendedor</label>
+              <label className="mb-1 block text-sm">Vendedor</label>
               <select
                 className="w-full rounded-md border px-3 py-2"
                 value={formData.vendor_id}
@@ -653,7 +694,7 @@ export default function InstalacionesClient() {
             </div>
 
             <div>
-              <label className="block text-sm mb-1">
+              <label className="mb-1 block text-sm">
                 {editingId ? "POS de la instalación" : "POS disponible"}
               </label>
               <select
@@ -672,7 +713,13 @@ export default function InstalacionesClient() {
 
               {!editingId && availablePosList.length === 0 && (
                 <p className="mt-1 text-xs text-rose-600">
-                  No hay POS liberados/disponibles para asignar.
+                  No hay POS disponibles para este comercio.
+                </p>
+              )}
+
+              {!editingId && formData.merchant_id && availablePosList.length > 0 && (
+                <p className="mt-1 text-xs text-slate-500">
+                  Se muestran POS en stock y también POS ya asignados a este comercio que todavía no tengan instalación activa.
                 </p>
               )}
 
@@ -684,7 +731,7 @@ export default function InstalacionesClient() {
             </div>
 
             <div>
-              <label className="block text-sm mb-1">Estado</label>
+              <label className="mb-1 block text-sm">Estado</label>
               <select
                 className="w-full rounded-md border px-3 py-2"
                 value={formData.status}
@@ -698,7 +745,7 @@ export default function InstalacionesClient() {
             </div>
 
             <div>
-              <label className="block text-sm mb-1">Fecha de instalación</label>
+              <label className="mb-1 block text-sm">Fecha de instalación</label>
               <input
                 type="date"
                 className="w-full rounded-md border px-3 py-2"
@@ -708,7 +755,7 @@ export default function InstalacionesClient() {
             </div>
 
             <div>
-              <label className="block text-sm mb-1">Notas</label>
+              <label className="mb-1 block text-sm">Notas</label>
               <textarea
                 className="w-full rounded-md border px-3 py-2"
                 rows={4}
@@ -744,8 +791,8 @@ export default function InstalacionesClient() {
           </form>
         </section>
 
-        <section className="rounded-xl bg-white p-6 shadow flex flex-col">
-          <div className="flex items-center justify-between mb-4 gap-3">
+        <section className="flex flex-col rounded-xl bg-white p-6 shadow">
+          <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-semibold">Listado</h2>
               <p className="text-sm text-slate-500">
@@ -754,7 +801,7 @@ export default function InstalacionesClient() {
             </div>
           </div>
 
-          <div className="flex gap-2 mb-4">
+          <div className="mb-4 flex gap-2">
             <input
               type="text"
               className="w-full rounded-md border px-3 py-2 text-sm"
@@ -766,7 +813,7 @@ export default function InstalacionesClient() {
             <button
               type="button"
               onClick={() => setSearch("")}
-              className="rounded-md border px-3 py-2 text-sm whitespace-nowrap"
+              className="whitespace-nowrap rounded-md border px-3 py-2 text-sm"
             >
               Limpiar
             </button>
@@ -779,19 +826,19 @@ export default function InstalacionesClient() {
                 : "No se encontraron instalaciones con esa búsqueda."}
             </p>
           ) : (
-            <div className="flex-1 overflow-auto max-h-[600px] pr-2 space-y-2">
+            <div className="max-h-[600px] flex-1 space-y-2 overflow-auto pr-2">
               {filteredInstallations.map((item) => (
                 <div
                   key={item.id}
-                  className="rounded-lg border p-3 flex flex-col gap-1"
+                  className="flex flex-col gap-1 rounded-lg border p-3"
                 >
-                  <div className="flex justify-between items-start gap-3">
+                  <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-semibold text-sm">
+                      <p className="text-sm font-semibold">
                         {getMerchantName(item.merchant_id)}
                       </p>
                       <span
-                        className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold mt-1 ${getStatusClass(
+                        className={`mt-1 inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getStatusClass(
                           item.status
                         )}`}
                       >
@@ -799,7 +846,7 @@ export default function InstalacionesClient() {
                       </span>
                     </div>
 
-                    <div className="flex gap-2 shrink-0">
+                    <div className="flex shrink-0 gap-2">
                       <button
                         onClick={() => handleEdit(item)}
                         className="rounded-md bg-blue-600 px-2 py-1 text-xs text-white"
