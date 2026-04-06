@@ -201,10 +201,6 @@ export default function InstalacionesClient() {
     );
   };
 
-  const getInstallationsForPos = (posId: string) => {
-    return installations.filter((i) => i.pos_id === posId);
-  };
-
   const hasActiveInstallation = (posId: string) => {
     return installations.some(
       (i) =>
@@ -214,15 +210,21 @@ export default function InstalacionesClient() {
     );
   };
 
-  const getAvailablePosList = () => {
-    if (!formData.merchant_id) return [];
+  const getEligiblePosListForMerchant = (merchantId: string, vendorId: string) => {
+    if (!merchantId || !vendorId) return [];
 
     return posDevices.filter((p) => {
-      const isInStock = p.status === "in_stock";
-      const isAssignedToThisMerchant =
-        p.status === "assigned_merchant" && p.merchant_id === formData.merchant_id;
+      const sameVendor = p.vendor_id === vendorId;
 
-      if (!isInStock && !isAssignedToThisMerchant) return false;
+      const assignedToVendor =
+        p.status === "assigned_vendor" && sameVendor;
+
+      const assignedToThisMerchant =
+        p.status === "assigned_merchant" &&
+        p.merchant_id === merchantId &&
+        sameVendor;
+
+      if (!assignedToVendor && !assignedToThisMerchant) return false;
       if (hasActiveInstallation(p.id)) return false;
 
       return true;
@@ -230,19 +232,22 @@ export default function InstalacionesClient() {
   };
 
   const getSelectablePosList = () => {
-    const available = getAvailablePosList();
+    const eligible = getEligiblePosListForMerchant(
+      formData.merchant_id,
+      formData.vendor_id
+    );
 
     if (!editingId || !formData.pos_id) {
-      return available;
+      return eligible;
     }
 
     const currentPos = posDevices.find((p) => p.id === formData.pos_id);
-    if (!currentPos) return available;
+    if (!currentPos) return eligible;
 
-    const exists = available.some((p) => p.id === currentPos.id);
-    if (exists) return available;
+    const exists = eligible.some((p) => p.id === currentPos.id);
+    if (exists) return eligible;
 
-    return [currentPos, ...available];
+    return [currentPos, ...eligible];
   };
 
   const handleMerchantChange = (merchantId: string) => {
@@ -340,13 +345,15 @@ export default function InstalacionesClient() {
 
     if (!editingId) {
       const canUsePos =
-        selectedPos.status === "in_stock" ||
+        (selectedPos.status === "assigned_vendor" &&
+          selectedPos.vendor_id === formData.vendor_id) ||
         (selectedPos.status === "assigned_merchant" &&
-          selectedPos.merchant_id === formData.merchant_id);
+          selectedPos.merchant_id === formData.merchant_id &&
+          selectedPos.vendor_id === formData.vendor_id);
 
       if (!canUsePos) {
         alert(
-          "El POS seleccionado no está disponible para este comercio."
+          "El POS seleccionado debe estar previamente asignado al vendedor del comercio o al mismo comercio."
         );
         return;
       }
@@ -632,7 +639,10 @@ export default function InstalacionesClient() {
     ? getAssignedMerchantPosList(formData.merchant_id)
     : [];
 
-  const availablePosList = getAvailablePosList();
+  const eligiblePosList = getEligiblePosListForMerchant(
+    formData.merchant_id,
+    formData.vendor_id
+  );
   const selectablePosList = getSelectablePosList();
 
   return (
@@ -671,7 +681,7 @@ export default function InstalacionesClient() {
                   {assignedMerchantPosList.length}
                 </p>
                 <p>
-                  POS disponibles para nueva instalación: {availablePosList.length}
+                  POS elegibles para instalación: {eligiblePosList.length}
                 </p>
               </div>
             )}
@@ -695,7 +705,7 @@ export default function InstalacionesClient() {
 
             <div>
               <label className="mb-1 block text-sm">
-                {editingId ? "POS de la instalación" : "POS disponible"}
+                {editingId ? "POS de la instalación" : "POS elegible"}
               </label>
               <select
                 className="w-full rounded-md border px-3 py-2"
@@ -711,15 +721,15 @@ export default function InstalacionesClient() {
                 ))}
               </select>
 
-              {!editingId && availablePosList.length === 0 && (
+              {!editingId && eligiblePosList.length === 0 && (
                 <p className="mt-1 text-xs text-rose-600">
-                  No hay POS disponibles para este comercio.
+                  No hay POS elegibles para este comercio. El POS debe estar previamente asignado al vendedor del comercio o al mismo comercio.
                 </p>
               )}
 
-              {!editingId && formData.merchant_id && availablePosList.length > 0 && (
+              {!editingId && formData.merchant_id && eligiblePosList.length > 0 && (
                 <p className="mt-1 text-xs text-slate-500">
-                  Se muestran POS en stock y también POS ya asignados a este comercio que todavía no tengan instalación activa.
+                  Se muestran solo POS del vendedor del comercio y también POS ya asignados a este comercio que todavía no tengan instalación activa.
                 </p>
               )}
 
@@ -768,7 +778,7 @@ export default function InstalacionesClient() {
             <div className="flex gap-3">
               <button
                 type="submit"
-                disabled={loading || (!editingId && availablePosList.length === 0)}
+                disabled={loading || (!editingId && eligiblePosList.length === 0)}
                 className="rounded-md bg-black px-4 py-2 text-white disabled:opacity-50"
               >
                 {loading
