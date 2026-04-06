@@ -120,211 +120,219 @@ export default async function DashboardPage() {
   const dashboardTitle = isVendor ? "Mi Dashboard" : "Dashboard";
 
   return (
-    <main className="min-h-screen bg-gray-50 p-6">
-      <h1 className="mb-6 text-3xl font-bold">{dashboardTitle}</h1>
-
-      <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-sm text-slate-500">Rol del usuario logueado</p>
-        <p className="mt-2 text-2xl font-bold text-slate-900">
-          {role || "Sin rol asignado"}
-        </p>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {cards.map((card) => (
-          <div
-            key={card.title}
-            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-          >
-            <p className="text-sm text-slate-500">{card.title}</p>
-            <p className="mt-3 text-3xl font-bold text-slate-900">
-              {card.value}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      <section className="mt-8">
-        <h2 className="mb-4 text-xl font-semibold">Alertas operativas</h2>
-
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">POS en stock</p>
-            <p className="mt-3 text-3xl font-bold text-emerald-600">
-              {posInStock}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">En mantenimiento</p>
-            <p className="mt-3 text-3xl font-bold text-amber-600">
-              {posMaintenance}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">Sin comercio asignado</p>
-            <p className="mt-3 text-3xl font-bold text-red-600">
-              {posWithoutMerchant}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">POS inactivos</p>
-            <p className="mt-3 text-3xl font-bold text-slate-600">
-              {posInactive}
-            </p>
-          </div>
+    <main className="h-[calc(100vh-120px)] overflow-hidden bg-gray-50 p-6">
+      <div className="flex h-full flex-col overflow-hidden">
+        <div className="mb-6 shrink-0">
+          <h1 className="text-3xl font-bold">{dashboardTitle}</h1>
         </div>
-      </section>
 
-      <section className="mt-8">
-        <h2 className="mb-4 text-xl font-semibold">Alertas inteligentes</h2>
-
-        <div className="grid gap-4 lg:grid-cols-3">
-          <div className="flex h-[320px] flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="font-semibold">Vendedores sin POS</h3>
-              <span className="rounded-full bg-rose-100 px-3 py-1 text-sm font-bold text-rose-700">
-                {vendorsWithoutPos.length}
-              </span>
+        <div className="flex-1 overflow-auto pr-2">
+          <div className="space-y-8">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <p className="text-sm text-slate-500">Rol del usuario logueado</p>
+              <p className="mt-2 text-2xl font-bold text-slate-900">
+                {role || "Sin rol asignado"}
+              </p>
             </div>
 
-            <div className="flex-1 overflow-auto pr-1">
-              {vendorsWithoutPos.length === 0 ? (
-                <p className="text-sm text-slate-500">Sin alertas.</p>
-              ) : (
-                <div className="space-y-2">
-                  {vendorsWithoutPos.map((vendor) => (
-                    <div
-                      key={vendor.id}
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700"
-                    >
-                      {vendor.name || "Sin nombre"}
-                    </div>
-                  ))}
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {cards.map((card) => (
+                <div
+                  key={card.title}
+                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                >
+                  <p className="text-sm text-slate-500">{card.title}</p>
+                  <p className="mt-3 text-3xl font-bold text-slate-900">
+                    {card.value}
+                  </p>
                 </div>
-              )}
-            </div>
-          </div>
-
-          <div className="flex h-[320px] flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="font-semibold">Comercios sin POS</h3>
-              <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-bold text-amber-700">
-                {merchantsWithoutPos.length}
-              </span>
+              ))}
             </div>
 
-            <div className="flex-1 overflow-auto pr-1">
-              {merchantsWithoutPos.length === 0 ? (
-                <p className="text-sm text-slate-500">Sin alertas.</p>
-              ) : (
-                <div className="space-y-2">
-                  {merchantsWithoutPos.map((merchant) => (
-                    <div
-                      key={merchant.id}
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700"
-                    >
-                      {merchant.name || "Sin nombre"}
-                    </div>
-                  ))}
+            <section>
+              <h2 className="mb-4 text-xl font-semibold">Alertas operativas</h2>
+
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <p className="text-sm text-slate-500">POS en stock</p>
+                  <p className="mt-3 text-3xl font-bold text-emerald-600">
+                    {posInStock}
+                  </p>
                 </div>
-              )}
-            </div>
-          </div>
 
-          <div className="flex h-[320px] flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="font-semibold">POS en comercio sin vendedor</h3>
-              <span className="rounded-full bg-violet-100 px-3 py-1 text-sm font-bold text-violet-700">
-                {posAssignedMerchantWithoutVendor.length}
-              </span>
-            </div>
-
-            <div className="flex-1 overflow-auto pr-1">
-              {posAssignedMerchantWithoutVendor.length === 0 ? (
-                <p className="text-sm text-slate-500">Sin alertas.</p>
-              ) : (
-                <div className="space-y-2">
-                  {posAssignedMerchantWithoutVendor.map((pos) => (
-                    <div
-                      key={pos.id}
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700"
-                    >
-                      {pos.code || "Sin código"}
-                    </div>
-                  ))}
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <p className="text-sm text-slate-500">En mantenimiento</p>
+                  <p className="mt-3 text-3xl font-bold text-amber-600">
+                    {posMaintenance}
+                  </p>
                 </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
 
-      <div className="mt-8 grid gap-6 xl:grid-cols-2">
-        <section className="flex h-[420px] flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-xl font-semibold">POS por vendedor</h2>
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <p className="text-sm text-slate-500">Sin comercio asignado</p>
+                  <p className="mt-3 text-3xl font-bold text-red-600">
+                    {posWithoutMerchant}
+                  </p>
+                </div>
 
-          <div className="flex-1 overflow-auto pr-1">
-            {posByVendor.length === 0 ? (
-              <p className="text-gray-500">No hay vendedores cargados.</p>
-            ) : (
-              <div className="space-y-3">
-                {posByVendor.map((v) => (
-                  <div
-                    key={v.id}
-                    className="flex items-center justify-between border-b border-slate-200 pb-2"
-                  >
-                    <p className="text-sm font-medium text-slate-700">
-                      {v.name}
-                    </p>
-                    <span className="text-sm font-bold text-slate-900">
-                      {v.count} POS
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <p className="text-sm text-slate-500">POS inactivos</p>
+                  <p className="mt-3 text-3xl font-bold text-slate-600">
+                    {posInactive}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h2 className="mb-4 text-xl font-semibold">Alertas inteligentes</h2>
+
+              <div className="grid gap-4 lg:grid-cols-3">
+                <div className="flex h-[320px] flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="font-semibold">Vendedores sin POS</h3>
+                    <span className="rounded-full bg-rose-100 px-3 py-1 text-sm font-bold text-rose-700">
+                      {vendorsWithoutPos.length}
                     </span>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
 
-        <section className="flex h-[420px] flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-xl font-semibold">Últimos movimientos</h2>
-
-          <div className="flex-1 overflow-auto pr-1">
-            {movements.length === 0 ? (
-              <p className="text-gray-500">No hay movimientos recientes.</p>
-            ) : (
-              <div className="space-y-3">
-                {movements.map((mov) => (
-                  <div
-                    key={mov.id}
-                    className="rounded-xl border border-slate-200 p-4"
-                  >
-                    <div className="mb-2 flex items-center gap-3">
-                      <span
-                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getMovementBadgeClass(
-                          mov.type
-                        )}`}
-                      >
-                        {getMovementLabel(mov.type)}
-                      </span>
-                    </div>
-
-                    <p className="text-sm text-slate-600">
-                      {mov.notes || "Sin detalle"}
-                    </p>
-
-                    <p className="mt-2 text-xs text-slate-400">
-                      {new Date(mov.created_at).toLocaleString("es-AR")}
-                    </p>
+                  <div className="flex-1 overflow-auto pr-1">
+                    {vendorsWithoutPos.length === 0 ? (
+                      <p className="text-sm text-slate-500">Sin alertas.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {vendorsWithoutPos.map((vendor) => (
+                          <div
+                            key={vendor.id}
+                            className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                          >
+                            {vendor.name || "Sin nombre"}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                ))}
+                </div>
+
+                <div className="flex h-[320px] flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="font-semibold">Comercios sin POS</h3>
+                    <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-bold text-amber-700">
+                      {merchantsWithoutPos.length}
+                    </span>
+                  </div>
+
+                  <div className="flex-1 overflow-auto pr-1">
+                    {merchantsWithoutPos.length === 0 ? (
+                      <p className="text-sm text-slate-500">Sin alertas.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {merchantsWithoutPos.map((merchant) => (
+                          <div
+                            key={merchant.id}
+                            className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                          >
+                            {merchant.name || "Sin nombre"}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex h-[320px] flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="font-semibold">POS en comercio sin vendedor</h3>
+                    <span className="rounded-full bg-violet-100 px-3 py-1 text-sm font-bold text-violet-700">
+                      {posAssignedMerchantWithoutVendor.length}
+                    </span>
+                  </div>
+
+                  <div className="flex-1 overflow-auto pr-1">
+                    {posAssignedMerchantWithoutVendor.length === 0 ? (
+                      <p className="text-sm text-slate-500">Sin alertas.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {posAssignedMerchantWithoutVendor.map((pos) => (
+                          <div
+                            key={pos.id}
+                            className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                          >
+                            {pos.code || "Sin código"}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-            )}
+            </section>
+
+            <div className="grid gap-6 xl:grid-cols-2">
+              <section className="flex h-[420px] flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="mb-4 text-xl font-semibold">POS por vendedor</h2>
+
+                <div className="flex-1 overflow-auto pr-1">
+                  {posByVendor.length === 0 ? (
+                    <p className="text-gray-500">No hay vendedores cargados.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {posByVendor.map((v) => (
+                        <div
+                          key={v.id}
+                          className="flex items-center justify-between border-b border-slate-200 pb-2"
+                        >
+                          <p className="text-sm font-medium text-slate-700">
+                            {v.name}
+                          </p>
+                          <span className="text-sm font-bold text-slate-900">
+                            {v.count} POS
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="flex h-[420px] flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="mb-4 text-xl font-semibold">Últimos movimientos</h2>
+
+                <div className="flex-1 overflow-auto pr-1">
+                  {movements.length === 0 ? (
+                    <p className="text-gray-500">No hay movimientos recientes.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {movements.map((mov) => (
+                        <div
+                          key={mov.id}
+                          className="rounded-xl border border-slate-200 p-4"
+                        >
+                          <div className="mb-2 flex items-center gap-3">
+                            <span
+                              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getMovementBadgeClass(
+                                mov.type
+                              )}`}
+                            >
+                              {getMovementLabel(mov.type)}
+                            </span>
+                          </div>
+
+                          <p className="text-sm text-slate-600">
+                            {mov.notes || "Sin detalle"}
+                          </p>
+
+                          <p className="mt-2 text-xs text-slate-400">
+                            {new Date(mov.created_at).toLocaleString("es-AR")}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </section>
+            </div>
           </div>
-        </section>
+        </div>
       </div>
     </main>
   );
