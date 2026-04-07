@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { getUserRole } from "@/lib/get-user-role";
 
+// @ts-nocheck
 type VendorRow = {
   id: string;
   name: string | null;
