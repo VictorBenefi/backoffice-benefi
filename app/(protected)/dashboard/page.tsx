@@ -2,11 +2,10 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { getUserRole } from "@/lib/get-user-role";
 
-type CommissionTarget = {
+type VendorRow = {
   id: string;
-  commission_setting_id: string;
-  installations_goal: number;
-  bonus_amount: number;
+  name: string | null;
+  auth_user_id: string | null;
 };
 
 type CommissionSetting = {
@@ -17,10 +16,11 @@ type CommissionSetting = {
   is_active: boolean;
 };
 
-type VendorRow = {
+type CommissionTarget = {
   id: string;
-  name: string | null;
-  auth_user_id: string | null;
+  commission_setting_id: string;
+  installations_goal: number;
+  bonus_amount: number;
 };
 
 type InstallationRow = {
@@ -167,9 +167,6 @@ export default async function DashboardPage() {
     (pos) => pos.status === "assigned_merchant" && !pos.vendor_id
   );
 
-  // =========================
-  // DASHBOARD DE COMISIONES
-  // =========================
   let commissionData: {
     installationsCount: number;
     baseAmount: number;
