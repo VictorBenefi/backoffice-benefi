@@ -221,7 +221,6 @@ export default function UsuariosClient() {
 
       if (!response.ok) {
         toast.error(result?.error || "No se pudo crear el usuario.");
-        setCreating(false);
         return;
       }
 
@@ -335,14 +334,16 @@ export default function UsuariosClient() {
           </form>
         </div>
 
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-xl font-semibold">Usuarios existentes</h2>
+        <div className="flex h-[620px] flex-col rounded-2xl border bg-white p-6 shadow-sm">
+          <h2 className="mb-4 text-xl font-semibold shrink-0">
+            Usuarios existentes
+          </h2>
 
-          <div className="max-h-[460px] overflow-auto rounded-lg border">
+          <div className="flex-1 overflow-auto rounded-lg border">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-white">
+              <thead className="sticky top-0 z-10 bg-white">
                 <tr className="border-b">
-                  <th className="pb-3 pl-3 text-left">Nombre</th>
+                  <th className="pb-3 pl-3 pt-3 text-left">Nombre</th>
                   <th className="text-left">Email</th>
                   <th className="text-left">Rol</th>
                   <th className="text-left">Estado</th>
@@ -400,7 +401,7 @@ export default function UsuariosClient() {
             </table>
           </div>
 
-          <p className="mt-3 text-xs text-slate-500">
+          <p className="mt-3 shrink-0 text-xs text-slate-500">
             El rol se define al crear el usuario. Si una persona cambia de
             función, se recomienda inactivar el usuario actual y crear uno nuevo
             con el rol correspondiente.
