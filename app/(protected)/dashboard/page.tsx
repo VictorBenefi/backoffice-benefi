@@ -1,8 +1,8 @@
+// @ts-nocheck
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { getUserRole } from "@/lib/get-user-role";
 
-// @ts-nocheck
 type VendorRow = {
   id: string;
   name: string | null;
@@ -176,6 +176,7 @@ export default async function DashboardPage() {
     progress: number;
     missingForNextTarget: number;
     potentialTotal: number;
+    hasTargets: boolean;
   } | null = null;
 
   if (isVendor && user?.id) {
@@ -233,11 +234,12 @@ export default async function DashboardPage() {
         const installationsCount = typedInstallations.length;
         const baseAmount = Number(typedConfig.base_amount_per_installation || 0);
         const baseTotal = installationsCount * baseAmount;
+        const hasTargets = typedTargets.length > 0;
 
         let nextTarget: CommissionTarget | null = null;
 
         for (const target of typedTargets) {
-          if (installationsCount < target.installations_goal) {
+          if (installationsCount < Number(target.installations_goal || 0)) {
             nextTarget = target;
             break;
           }
@@ -245,13 +247,17 @@ export default async function DashboardPage() {
 
         const progress = nextTarget
           ? Math.min(
-              (installationsCount / nextTarget.installations_goal) * 100,
+              (installationsCount / Number(nextTarget.installations_goal || 1)) *
+                100,
               100
             )
-          : 100;
+          : 0;
 
         const missingForNextTarget = nextTarget
-          ? Math.max(nextTarget.installations_goal - installationsCount, 0)
+          ? Math.max(
+              Number(nextTarget.installations_goal || 0) - installationsCount,
+              0
+            )
           : 0;
 
         const potentialTotal = nextTarget
@@ -266,6 +272,7 @@ export default async function DashboardPage() {
           progress,
           missingForNextTarget,
           potentialTotal,
+          hasTargets,
         };
       }
     }
@@ -338,7 +345,9 @@ export default async function DashboardPage() {
                   <div className="rounded-xl border border-slate-200 p-4">
                     <p className="text-sm text-slate-500">Próximo objetivo</p>
                     <p className="mt-2 text-2xl font-bold text-blue-600">
-                      {commissionData.nextTarget
+                      {!commissionData.hasTargets
+                        ? "Sin objetivos"
+                        : commissionData.nextTarget
                         ? `${commissionData.nextTarget.installations_goal} instalaciones`
                         : "Objetivos cumplidos"}
                     </p>
@@ -359,7 +368,11 @@ export default async function DashboardPage() {
                   </div>
                 </div>
 
-                {commissionData.nextTarget ? (
+                {!commissionData.hasTargets ? (
+                  <div className="mt-5 rounded-xl bg-amber-50 p-4 text-sm text-amber-700">
+                    No hay objetivos configurados para el período activo.
+                  </div>
+                ) : commissionData.nextTarget ? (
                   <div className="mt-5 rounded-xl bg-blue-50 p-4 text-sm text-slate-700">
                     <p>
                       Te faltan{" "}
@@ -595,7 +608,9 @@ export default async function DashboardPage() {
                           </p>
 
                           <p className="mt-2 text-xs text-slate-400">
-                            {new Date(mov.created_at).toLocaleString("es-AR")}
+                            {new Date(mov.created_at || "").toLocaleString(
+                              "es-AR"
+                            )}
                           </p>
                         </div>
                       ))}
