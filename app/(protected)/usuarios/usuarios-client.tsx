@@ -1,44 +1,36 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 
 type AppUser = {
   id: string;
-  auth_user_id: string | null;
-  name: string | null;
-  email: string | null;
-  role: string | null;
-  is_active: boolean | null;
-};
-
-const initialForm = {
-  name: "",
-  email: "",
-  password: "",
-  role: "operaciones",
+  name: string;
+  email: string;
+  role: string;
+  is_active: boolean;
 };
 
 export default function UsuariosClient() {
   const supabase = createClient();
 
   const [users, setUsers] = useState<AppUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [savingId, setSavingId] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const [formData, setFormData] = useState(initialForm);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState("vendedor");
+
   const [showPassword, setShowPassword] = useState(false);
 
+  // RESET PASSWORD
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetUser, setResetUser] = useState<AppUser | null>(null);
   const [resetPasswordValue, setResetPasswordValue] = useState("");
   const [resetConfirmPassword, setResetConfirmPassword] = useState("");
-  const [resetLoading, setResetLoading] = useState(false);
   const [showResetPassword, setShowResetPassword] = useState(false);
-
-  const roles = ["admin", "operaciones", "supervisor", "vendedor", "soporte"];
+  const [resetLoading, setResetLoading] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -47,275 +39,261 @@ export default function UsuariosClient() {
   async function fetchUsers() {
     setLoading(true);
 
-    const { data, error } = await supabase
-      .from("app_users")
-      .select("*")
-      .order("name", { ascending: true });
+    const { data } = await supabase.from("app_users").select("*").order("name");
 
-    if (error) {
-      toast.error(`Error cargando usuarios: ${error.message}`);
-      setUsers([]);
-      setLoading(false);
-      return;
-    }
+    if (data) setUsers(data);
 
-    setUsers((data as AppUser[]) || []);
     setLoading(false);
   }
 
-  async function updateRole(id: string, role: string) {
-    setSavingId(id);
-
-    const { error } = await supabase
-      .from("app_users")
-      .update({ role })
-      .eq("id", id);
-
-    setSavingId(null);
-
-    if (error) {
-      toast.error(`Error actualizando rol: ${error.message}`);
+  async function createUser() {
+    if (!name || !email || !password) {
+      alert("Completar todos los campos");
       return;
     }
 
-    toast.success("Rol actualizado correctamente.");
-    await fetchUsers();
+    const res = await fetch("/api/admin/create-user", {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        email,
+        password,
+        role,
+      }),
+    });
+
+    const result = await res.json();
+
+    if (!res.ok) {
+      alert(result.error || "Error al crear usuario");
+      return;
+    }
+
+    setName("");
+    setEmail("");
+    setPassword("");
+
+    fetchUsers();
+  }
+
+  async function updateRole(user: AppUser, newRole: string) {
+    const { error } = await supabase
+      .from("app_users")
+      .update({ role: newRole })
+      .eq("id", user.id);
+
+    if (error) {
+      alert("Error al actualizar rol");
+      return;
+    }
+
+    fetchUsers();
   }
 
   async function toggleActive(user: AppUser) {
     const nextValue = !user.is_active;
-
-    setSavingId(user.id);
 
     const { error } = await supabase
       .from("app_users")
       .update({ is_active: nextValue })
       .eq("id", user.id);
 
-    setSavingId(null);
-
     if (error) {
-      toast.error(`Error actualizando estado: ${error.message}`);
+      alert("Error al actualizar estado");
       return;
     }
 
-    toast.success(
-      nextValue
-        ? "Usuario activado correctamente."
-        : "Usuario inactivado correctamente."
-    );
-
-    await fetchUsers();
+    fetchUsers();
   }
 
-  async function createUser(e: React.FormEvent) {
-    e.preventDefault();
-
-    if (!formData.name.trim()) {
-      toast.warning("Debés ingresar el nombre.");
-      return;
-    }
-
-    if (!formData.email.trim()) {
-      toast.warning("Debés ingresar el email.");
-      return;
-    }
-
-    if (!formData.password.trim()) {
-      toast.warning("Debés ingresar la contraseña.");
-      return;
-    }
-
-    if (formData.password.length < 6) {
-      toast.warning("Mínimo 6 caracteres.");
-      return;
-    }
-
-    setCreating(true);
-
-    try {
-      const response = await fetch("/api/admin/create-user", {
-        method: "POST",
-        body: JSON.stringify(formData),
-      });
-
-      if (!response.ok) {
-        toast.error("Error creando usuario");
-        return;
-      }
-
-      toast.success("Usuario creado correctamente");
-      setFormData(initialForm);
-      setShowPassword(false);
-      await fetchUsers();
-    } catch (error) {
-      toast.error("Error inesperado");
-    } finally {
-      setCreating(false);
-    }
+  // 🔥 FIX ERROR BUILD (FUNCIONES QUE FALTABAN)
+  function openResetModal(user: AppUser) {
+    setResetUser(user);
+    setResetPasswordValue("");
+    setResetConfirmPassword("");
+    setShowResetPassword(false);
+    setShowResetModal(true);
   }
 
-  if (loading) return <p>Cargando usuarios...</p>;
+  function closeResetModal() {
+    if (resetLoading) return;
+    setShowResetModal(false);
+    setResetUser(null);
+    setResetPasswordValue("");
+    setResetConfirmPassword("");
+    setShowResetPassword(false);
+  }
+
+  async function resetPassword() {
+    if (!resetUser) return;
+
+    if (!resetPasswordValue || !resetConfirmPassword) {
+      alert("Completar contraseña");
+      return;
+    }
+
+    if (resetPasswordValue !== resetConfirmPassword) {
+      alert("Las contraseñas no coinciden");
+      return;
+    }
+
+    setResetLoading(true);
+
+    const res = await fetch("/api/admin/reset-password", {
+      method: "POST",
+      body: JSON.stringify({
+        userId: resetUser.id,
+        password: resetPasswordValue,
+      }),
+    });
+
+    const result = await res.json();
+
+    if (!res.ok) {
+      alert(result.error || "Error al resetear contraseña");
+      setResetLoading(false);
+      return;
+    }
+
+    setResetLoading(false);
+    closeResetModal();
+  }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Usuarios y roles</h1>
+    <div className="p-4 space-y-6 overflow-auto max-h-[calc(100vh-80px)]">
+      <h1 className="text-xl font-bold">Usuarios y roles</h1>
 
-      {/* ALTA */}
-      <div className="bg-white rounded-2xl shadow-sm border p-6">
-        <h2 className="text-xl font-semibold mb-4">Alta de usuario</h2>
+      {/* FORM */}
+      <div className="border rounded p-4 space-y-3">
+        <h2 className="font-semibold">Alta de usuario</h2>
 
-        <form onSubmit={createUser} className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="text-sm">Nombre</label>
-            <input
-              className="w-full border rounded-lg px-3 py-2"
-              placeholder="Ej: Juan Pérez"
-              value={formData.name}
-              onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
-              }
-            />
-          </div>
+        <input
+          placeholder="Nombre completo"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="border p-2 w-full"
+        />
 
-          <div>
-            <label className="text-sm">Email</label>
-            <input
-              className="w-full border rounded-lg px-3 py-2"
-              placeholder="Ej: usuario@empresa.com"
-              value={formData.email}
-              onChange={(e) =>
-                setFormData({ ...formData, email: e.target.value })
-              }
-            />
-          </div>
+        <input
+          placeholder="email@ejemplo.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="border p-2 w-full"
+        />
 
-          <div className="md:col-span-2">
-            <label className="text-sm">Contraseña</label>
-            <div className="flex gap-2">
-              <input
-                type={showPassword ? "text" : "password"}
-                className="w-full border rounded-lg px-3 py-2"
-                placeholder="Ej: 123456"
-                value={formData.password}
-                onChange={(e) =>
-                  setFormData({ ...formData, password: e.target.value })
-                }
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="border px-3 rounded-lg"
-              >
-                {showPassword ? "Ocultar" : "Ver"}
-              </button>
-            </div>
-          </div>
+        <div className="flex gap-2">
+          <input
+            type={showPassword ? "text" : "password"}
+            placeholder="Contraseña inicial"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="border p-2 w-full"
+          />
+          <button onClick={() => setShowPassword(!showPassword)}>Ver</button>
+        </div>
 
-          <div>
-            <label className="text-sm">Rol</label>
-            <select
-              className="w-full border rounded-lg px-3 py-2"
-              value={formData.role}
-              onChange={(e) =>
-                setFormData({ ...formData, role: e.target.value })
-              }
-            >
-              {roles.map((r) => (
-                <option key={r}>{r}</option>
-              ))}
-            </select>
-          </div>
+        <select
+          value={role}
+          onChange={(e) => setRole(e.target.value)}
+          className="border p-2"
+        >
+          <option value="admin">admin</option>
+          <option value="supervisor">supervisor</option>
+          <option value="operaciones">operaciones</option>
+          <option value="soporte">soporte</option>
+          <option value="vendedor">vendedor</option>
+        </select>
 
-          <div className="md:col-span-2">
-            <button className="bg-black text-white px-4 py-2 rounded-lg">
-              {creating ? "Creando..." : "Crear usuario"}
-            </button>
-          </div>
-        </form>
+        <button onClick={createUser} className="bg-black text-white px-4 py-2">
+          Crear usuario
+        </button>
       </div>
 
       {/* LISTADO */}
-      <div className="bg-white rounded-2xl shadow-sm border p-6">
-        <h2 className="text-xl font-semibold mb-4">Usuarios existentes</h2>
+      <div className="border rounded p-4">
+        <h2 className="font-semibold mb-3">Usuarios existentes</h2>
 
-        <div className="max-h-[400px] overflow-y-auto border rounded-lg">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-white">
-              <tr className="border-b">
-                <th className="p-2 text-left">Nombre</th>
-                <th>Email</th>
-                <th>Rol</th>
-                <th>Estado</th>
-                <th>Acción</th>
-              </tr>
-            </thead>
+        <div className="max-h-[400px] overflow-auto">
+          {users.map((u) => (
+            <div
+              key={u.id}
+              className="flex justify-between items-center border-b py-2"
+            >
+              <div>
+                <div>{u.name}</div>
+                <div className="text-sm text-gray-500">{u.email}</div>
+              </div>
 
-            <tbody>
-              {users.map((user) => (
-                <tr key={user.id} className="border-b">
-                  <td className="p-2">{user.name}</td>
-                  <td>{user.email}</td>
+              <div className="flex items-center gap-2">
+                <select
+                  value={u.role}
+                  onChange={(e) => updateRole(u, e.target.value)}
+                  className="border p-1"
+                >
+                  <option value="admin">admin</option>
+                  <option value="supervisor">supervisor</option>
+                  <option value="operaciones">operaciones</option>
+                  <option value="soporte">soporte</option>
+                  <option value="vendedor">vendedor</option>
+                </select>
 
-                  <td>
-                    <select
-                      className="border px-2 py-1 rounded"
-                      value={user.role || ""}
-                      onChange={(e) => {
-                        const newRole = e.target.value;
-                        setUsers((prev) =>
-                          prev.map((u) =>
-                            u.id === user.id ? { ...u, role: newRole } : u
-                          )
-                        );
-                      }}
-                    >
-                      {roles.map((r) => (
-                        <option key={r}>{r}</option>
-                      ))}
-                    </select>
-                  </td>
+                <button
+                  onClick={() => toggleActive(u)}
+                  className="bg-red-500 text-white px-2 py-1"
+                >
+                  {u.is_active ? "Inactivar" : "Activar"}
+                </button>
 
-                  <td>
-                    <span
-                      className={`px-2 py-1 rounded text-xs ${
-                        user.is_active
-                          ? "bg-green-100 text-green-700"
-                          : "bg-red-100 text-red-700"
-                      }`}
-                    >
-                      {user.is_active ? "Activo" : "Inactivo"}
-                    </span>
-                  </td>
-
-                  <td className="flex gap-2 p-2 flex-wrap">
-                    <button
-                      onClick={() => updateRole(user.id, user.role || "")}
-                      className="bg-black text-white px-2 py-1 rounded"
-                    >
-                      Guardar
-                    </button>
-
-                    <button
-                      onClick={() => toggleActive(user)}
-                      className="bg-red-600 text-white px-2 py-1 rounded"
-                    >
-                      {user.is_active ? "Inactivar" : "Activar"}
-                    </button>
-
-                    <button
-                      onClick={() => openResetModal(user)}
-                      className="bg-blue-600 text-white px-2 py-1 rounded"
-                    >
-                      Reset
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                <button
+                  onClick={() => openResetModal(u)}
+                  className="bg-blue-600 text-white px-2 py-1"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
+
+      {/* MODAL RESET */}
+      {showResetModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
+          <div className="bg-white p-6 rounded w-[350px] space-y-3">
+            <h3 className="font-bold">Reset contraseña</h3>
+
+            <input
+              type={showResetPassword ? "text" : "password"}
+              placeholder="Nueva contraseña"
+              value={resetPasswordValue}
+              onChange={(e) => setResetPasswordValue(e.target.value)}
+              className="border p-2 w-full"
+            />
+
+            <input
+              type={showResetPassword ? "text" : "password"}
+              placeholder="Confirmar contraseña"
+              value={resetConfirmPassword}
+              onChange={(e) => setResetConfirmPassword(e.target.value)}
+              className="border p-2 w-full"
+            />
+
+            <button onClick={() => setShowResetPassword(!showResetPassword)}>
+              Ver contraseña
+            </button>
+
+            <div className="flex justify-end gap-2">
+              <button onClick={closeResetModal}>Cancelar</button>
+              <button
+                onClick={resetPassword}
+                className="bg-blue-600 text-white px-3 py-1"
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
