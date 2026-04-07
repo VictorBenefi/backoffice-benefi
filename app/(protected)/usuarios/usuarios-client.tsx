@@ -240,10 +240,10 @@ export default function UsuariosClient() {
 
   return (
     <>
-      <div className="space-y-6">
-        <h1 className="text-3xl font-bold">Usuarios y roles</h1>
+      <div className="flex h-[calc(100vh-140px)] flex-col gap-6 overflow-hidden">
+        <h1 className="shrink-0 text-3xl font-bold">Usuarios y roles</h1>
 
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+        <div className="shrink-0 rounded-2xl border bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-xl font-semibold">Alta de usuario</h2>
 
           <form
@@ -334,12 +334,12 @@ export default function UsuariosClient() {
           </form>
         </div>
 
-        <div className="flex h-[620px] flex-col rounded-2xl border bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-xl font-semibold shrink-0">
+        <div className="flex min-h-0 flex-1 flex-col rounded-2xl border bg-white p-6 shadow-sm">
+          <h2 className="mb-4 shrink-0 text-xl font-semibold">
             Usuarios existentes
           </h2>
 
-          <div className="flex-1 overflow-auto rounded-lg border">
+          <div className="min-h-0 flex-1 overflow-auto rounded-lg border">
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10 bg-white">
                 <tr className="border-b">
