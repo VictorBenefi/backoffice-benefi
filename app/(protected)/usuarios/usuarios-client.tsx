@@ -240,7 +240,7 @@ export default function UsuariosClient() {
 
   return (
     <>
-      <div className="flex h-[calc(100vh-140px)] flex-col gap-6 overflow-hidden">
+      <div className="flex h-[calc(100vh-110px)] flex-col gap-6 overflow-hidden">
         <h1 className="shrink-0 text-3xl font-bold">Usuarios y roles</h1>
 
         <div className="shrink-0 rounded-2xl border bg-white p-6 shadow-sm">
