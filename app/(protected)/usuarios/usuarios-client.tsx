@@ -108,81 +108,6 @@ export default function UsuariosClient() {
     await fetchUsers();
   }
 
-  function openResetModal(user: AppUser) {
-    setResetUser(user);
-    setResetPasswordValue("");
-    setResetConfirmPassword("");
-    setShowResetPassword(false);
-    setShowResetModal(true);
-  }
-
-  function closeResetModal() {
-    if (resetLoading) return;
-    setShowResetModal(false);
-    setResetUser(null);
-    setResetPasswordValue("");
-    setResetConfirmPassword("");
-    setShowResetPassword(false);
-  }
-
-  async function handleResetPassword() {
-    if (!resetUser) {
-      toast.error("No se pudo identificar el usuario.");
-      return;
-    }
-
-    if (!resetUser.auth_user_id) {
-      toast.error("Este usuario no tiene auth_user_id vinculado.");
-      return;
-    }
-
-    if (!resetPasswordValue.trim() || !resetConfirmPassword.trim()) {
-      toast.warning("Debés completar ambos campos.");
-      return;
-    }
-
-    if (resetPasswordValue.length < 6) {
-      toast.warning("La contraseña debe tener al menos 6 caracteres.");
-      return;
-    }
-
-    if (resetPasswordValue !== resetConfirmPassword) {
-      toast.error("Las contraseñas no coinciden.");
-      return;
-    }
-
-    try {
-      setResetLoading(true);
-
-      const response = await fetch("/api/admin/reset-password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId: resetUser.auth_user_id,
-          password: resetPasswordValue,
-        }),
-      });
-
-      const result = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        toast.error(result?.error || "No se pudo actualizar la contraseña.");
-        return;
-      }
-
-      toast.success(result?.message || "Contraseña actualizada correctamente.");
-      closeResetModal();
-      await fetchUsers();
-    } catch (error) {
-      console.error(error);
-      toast.error("Error al actualizar contraseña.");
-    } finally {
-      setResetLoading(false);
-    }
-  }
-
   async function createUser(e: React.FormEvent) {
     e.preventDefault();
 
@@ -197,12 +122,12 @@ export default function UsuariosClient() {
     }
 
     if (!formData.password.trim()) {
-      toast.warning("Debés ingresar la contraseña inicial.");
+      toast.warning("Debés ingresar la contraseña.");
       return;
     }
 
-    if (formData.password.trim().length < 6) {
-      toast.warning("La contraseña inicial debe tener al menos 6 caracteres.");
+    if (formData.password.length < 6) {
+      toast.warning("Mínimo 6 caracteres.");
       return;
     }
 
@@ -211,32 +136,20 @@ export default function UsuariosClient() {
     try {
       const response = await fetch("/api/admin/create-user", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: formData.name.trim(),
-          email: formData.email.trim().toLowerCase(),
-          password: formData.password,
-          role: formData.role,
-        }),
+        body: JSON.stringify(formData),
       });
 
-      const result = await response.json().catch(() => null);
-
       if (!response.ok) {
-        toast.error(result?.error || "No se pudo crear el usuario.");
-        setCreating(false);
+        toast.error("Error creando usuario");
         return;
       }
 
-      toast.success("Usuario creado correctamente.");
+      toast.success("Usuario creado correctamente");
       setFormData(initialForm);
       setShowPassword(false);
       await fetchUsers();
     } catch (error) {
-      console.error(error);
-      toast.error("Ocurrió un error al crear el usuario.");
+      toast.error("Error inesperado");
     } finally {
       setCreating(false);
     }
@@ -245,101 +158,92 @@ export default function UsuariosClient() {
   if (loading) return <p>Cargando usuarios...</p>;
 
   return (
-    <>
-      <div className="space-y-6">
-        <h1 className="text-3xl font-bold">Usuarios y roles</h1>
+    <div className="space-y-6">
+      <h1 className="text-3xl font-bold">Usuarios y roles</h1>
 
-        <div className="bg-white rounded-2xl shadow-sm border p-6">
-          <h2 className="text-xl font-semibold mb-4">Alta de usuario</h2>
+      {/* ALTA */}
+      <div className="bg-white rounded-2xl shadow-sm border p-6">
+        <h2 className="text-xl font-semibold mb-4">Alta de usuario</h2>
 
-          <form onSubmit={createUser} className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="block text-sm mb-1">Nombre</label>
+        <form onSubmit={createUser} className="grid gap-4 md:grid-cols-2">
+          <div>
+            <label className="text-sm">Nombre</label>
+            <input
+              className="w-full border rounded-lg px-3 py-2"
+              placeholder="Ej: Juan Pérez"
+              value={formData.name}
+              onChange={(e) =>
+                setFormData({ ...formData, name: e.target.value })
+              }
+            />
+          </div>
+
+          <div>
+            <label className="text-sm">Email</label>
+            <input
+              className="w-full border rounded-lg px-3 py-2"
+              placeholder="Ej: usuario@empresa.com"
+              value={formData.email}
+              onChange={(e) =>
+                setFormData({ ...formData, email: e.target.value })
+              }
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="text-sm">Contraseña</label>
+            <div className="flex gap-2">
               <input
-                type="text"
-                className="w-full rounded-lg border px-3 py-2"
-                value={formData.name}
+                type={showPassword ? "text" : "password"}
+                className="w-full border rounded-lg px-3 py-2"
+                placeholder="Ej: 123456"
+                value={formData.password}
                 onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, name: e.target.value }))
+                  setFormData({ ...formData, password: e.target.value })
                 }
-                placeholder="Nombre completo"
               />
-            </div>
-
-            <div>
-              <label className="block text-sm mb-1">Email / Usuario</label>
-              <input
-                type="email"
-                className="w-full rounded-lg border px-3 py-2"
-                value={formData.email}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, email: e.target.value }))
-                }
-                placeholder="usuario@empresa.com"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-sm mb-1">Contraseña inicial</label>
-
-              <div className="flex gap-2">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  className="w-full rounded-lg border px-3 py-2"
-                  value={formData.password}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      password: e.target.value,
-                    }))
-                  }
-                  placeholder="Contraseña inicial"
-                />
-
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  className="rounded-lg border px-3 py-2 text-sm"
-                >
-                  {showPassword ? "Ocultar" : "Ver"}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm mb-1">Rol</label>
-              <select
-                className="w-full rounded-lg border px-3 py-2"
-                value={formData.role}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, role: e.target.value }))
-                }
-              >
-                {roles.map((r) => (
-                  <option key={r}>{r}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="md:col-span-2">
               <button
-                type="submit"
-                disabled={creating}
-                className="bg-black text-white px-4 py-2 rounded-lg"
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="border px-3 rounded-lg"
               >
-                {creating ? "Creando..." : "Crear usuario"}
+                {showPassword ? "Ocultar" : "Ver"}
               </button>
             </div>
-          </form>
-        </div>
+          </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border p-6">
-          <h2 className="text-xl font-semibold mb-4">Usuarios existentes</h2>
+          <div>
+            <label className="text-sm">Rol</label>
+            <select
+              className="w-full border rounded-lg px-3 py-2"
+              value={formData.role}
+              onChange={(e) =>
+                setFormData({ ...formData, role: e.target.value })
+              }
+            >
+              {roles.map((r) => (
+                <option key={r}>{r}</option>
+              ))}
+            </select>
+          </div>
 
+          <div className="md:col-span-2">
+            <button className="bg-black text-white px-4 py-2 rounded-lg">
+              {creating ? "Creando..." : "Crear usuario"}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* LISTADO */}
+      <div className="bg-white rounded-2xl shadow-sm border p-6">
+        <h2 className="text-xl font-semibold mb-4">Usuarios existentes</h2>
+
+        <div className="max-h-[400px] overflow-y-auto border rounded-lg">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left border-b">
-                <th className="pb-3">Nombre</th>
+            <thead className="sticky top-0 bg-white">
+              <tr className="border-b">
+                <th className="p-2 text-left">Nombre</th>
                 <th>Email</th>
                 <th>Rol</th>
                 <th>Estado</th>
@@ -350,16 +254,15 @@ export default function UsuariosClient() {
             <tbody>
               {users.map((user) => (
                 <tr key={user.id} className="border-b">
-                  <td className="py-3">{user.name || "-"}</td>
-                  <td>{user.email || "-"}</td>
+                  <td className="p-2">{user.name}</td>
+                  <td>{user.email}</td>
 
                   <td>
                     <select
-                      className="border rounded-lg px-2 py-1"
+                      className="border px-2 py-1 rounded"
                       value={user.role || ""}
                       onChange={(e) => {
                         const newRole = e.target.value;
-
                         setUsers((prev) =>
                           prev.map((u) =>
                             u.id === user.id ? { ...u, role: newRole } : u
@@ -375,43 +278,37 @@ export default function UsuariosClient() {
 
                   <td>
                     <span
-                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                      className={`px-2 py-1 rounded text-xs ${
                         user.is_active
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-rose-100 text-rose-700"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-red-100 text-red-700"
                       }`}
                     >
                       {user.is_active ? "Activo" : "Inactivo"}
                     </span>
                   </td>
 
-                  <td>
-                    <div className="flex gap-2 flex-wrap">
-                      <button
-                        onClick={() => updateRole(user.id, user.role || "")}
-                        disabled={savingId === user.id}
-                        className="bg-black text-white px-3 py-1 rounded-lg"
-                      >
-                        Guardar rol
-                      </button>
+                  <td className="flex gap-2 p-2 flex-wrap">
+                    <button
+                      onClick={() => updateRole(user.id, user.role || "")}
+                      className="bg-black text-white px-2 py-1 rounded"
+                    >
+                      Guardar
+                    </button>
 
-                      <button
-                        onClick={() => toggleActive(user)}
-                        disabled={savingId === user.id}
-                        className={`px-3 py-1 rounded-lg text-white ${
-                          user.is_active ? "bg-red-600" : "bg-emerald-600"
-                        }`}
-                      >
-                        {user.is_active ? "Inactivar" : "Reactivar"}
-                      </button>
+                    <button
+                      onClick={() => toggleActive(user)}
+                      className="bg-red-600 text-white px-2 py-1 rounded"
+                    >
+                      {user.is_active ? "Inactivar" : "Activar"}
+                    </button>
 
-                      <button
-                        onClick={() => openResetModal(user)}
-                        className="px-3 py-1 rounded-lg bg-blue-600 text-white"
-                      >
-                        Reset clave
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => openResetModal(user)}
+                      className="bg-blue-600 text-white px-2 py-1 rounded"
+                    >
+                      Reset
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -419,74 +316,6 @@ export default function UsuariosClient() {
           </table>
         </div>
       </div>
-
-      {showResetModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="text-xl font-semibold text-gray-900">
-              Resetear contraseña
-            </h3>
-
-            <p className="mt-2 text-sm text-gray-600">
-              Usuario: <span className="font-medium">{resetUser?.email || "-"}</span>
-            </p>
-
-            <div className="mt-5 space-y-4">
-              <div>
-                <label className="mb-1 block text-sm">Nueva contraseña</label>
-                <input
-                  type={showResetPassword ? "text" : "password"}
-                  className="w-full rounded-lg border px-3 py-2"
-                  value={resetPasswordValue}
-                  onChange={(e) => setResetPasswordValue(e.target.value)}
-                  placeholder="Ingresá nueva contraseña"
-                  disabled={resetLoading}
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm">Confirmar contraseña</label>
-                <input
-                  type={showResetPassword ? "text" : "password"}
-                  className="w-full rounded-lg border px-3 py-2"
-                  value={resetConfirmPassword}
-                  onChange={(e) => setResetConfirmPassword(e.target.value)}
-                  placeholder="Confirmá la contraseña"
-                  disabled={resetLoading}
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowResetPassword((prev) => !prev)}
-                className="rounded-lg border px-3 py-2 text-sm"
-              >
-                {showResetPassword ? "Ocultar contraseñas" : "Ver contraseñas"}
-              </button>
-            </div>
-
-            <div className="mt-6 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={closeResetModal}
-                disabled={resetLoading}
-                className="rounded-lg border px-4 py-2"
-              >
-                Cancelar
-              </button>
-
-              <button
-                type="button"
-                onClick={handleResetPassword}
-                disabled={resetLoading}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-white disabled:opacity-70"
-              >
-                {resetLoading ? "Actualizando..." : "Guardar nueva clave"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+    </div>
   );
 }
