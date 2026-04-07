@@ -2,6 +2,37 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { getUserRole } from "@/lib/get-user-role";
 
+type CommissionTarget = {
+  id: string;
+  commission_setting_id: string;
+  installations_goal: number;
+  bonus_amount: number;
+};
+
+type CommissionSetting = {
+  id: string;
+  year: number;
+  month: number;
+  base_amount_per_installation: number;
+  is_active: boolean;
+};
+
+type VendorRow = {
+  id: string;
+  name: string | null;
+  auth_user_id: string | null;
+};
+
+type InstallationRow = {
+  id: string;
+  vendor_id: string | null;
+  status: string | null;
+  install_date: string | null;
+  created_at: string;
+  merchant_id: string | null;
+  pos_id: string | null;
+};
+
 export default async function DashboardPage() {
   const role = await getUserRole();
   const cookieStore = await cookies();
@@ -19,6 +50,10 @@ export default async function DashboardPage() {
     }
   );
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   const [posRes, movRes, vendorRes, merchantRes] = await Promise.all([
     supabase.from("pos_devices").select("*"),
     supabase
@@ -32,84 +67,10 @@ export default async function DashboardPage() {
 
   const posDevices = posRes.data || [];
   const movements = movRes.data || [];
-  const vendors = vendorRes.data || [];
+  const vendors = (vendorRes.data || []) as VendorRow[];
   const merchants = merchantRes.data || [];
 
   const isVendor = role === "vendedor";
-  // === DATOS DE COMISIONES (solo vendedor) ===
-let commissionData = null;
-
-if (isVendor) {
-  const today = new Date();
-  const currentMonth = today.getMonth() + 1;
-  const currentYear = today.getFullYear();
-
-  // Obtener vendedor logueado
-  const { data: currentVendor } = await supabase
-    .from("vendors")
-    .select("*")
-    .limit(1)
-    .single();
-
-  if (currentVendor) {
-    // instalaciones del mes
-    const { data: installations } = await supabase
-      .from("installations")
-      .select("*")
-      .eq("vendor_id", currentVendor.id)
-      .eq("status", "completed");
-
-    const installationsCount = installations?.length || 0;
-
-    // config del mes
-    const { data: config } = await supabase
-      .from("commission_settings")
-      .select("*")
-      .eq("year", currentYear)
-      .eq("month", currentMonth)
-      .eq("is_active", true)
-      .single();
-
-    // objetivos
-    const { data: targets } = await supabase
-      .from("commission_targets")
-      .select("*")
-      .eq("commission_setting_id", config?.id || "");
-
-    if (config) {
-      const base = config.base_amount_per_installation || 0;
-      const baseTotal = installationsCount * base;
-
-      // ordenar objetivos
-      const sortedTargets = (targets || []).sort(
-        (a, b) => a.installations_goal - b.installations_goal
-      );
-
-      let nextTarget = null;
-
-      for (const t of sortedTargets) {
-        if (installationsCount < t.installations_goal) {
-          nextTarget = t;
-          break;
-        }
-      }
-
-      const progress = nextTarget
-        ? Math.min(
-            (installationsCount / nextTarget.installations_goal) * 100,
-            100
-          )
-        : 100;
-
-      commissionData = {
-        installationsCount,
-        baseTotal,
-        nextTarget,
-        progress,
-      };
-    }
-  }
-}
   const dashboardTitle = isVendor ? "Mi Dashboard" : "Dashboard";
 
   const totalPos = posDevices.length;
@@ -164,6 +125,8 @@ if (isVendor) {
         return "En mantenimiento";
       case "baja":
         return "Baja";
+      case "instalacion_completada":
+        return "Instalación completada";
       default:
         return type;
     }
@@ -183,6 +146,8 @@ if (isVendor) {
         return "bg-amber-100 text-amber-700";
       case "baja":
         return "bg-rose-100 text-rose-700";
+      case "instalacion_completada":
+        return "bg-emerald-100 text-emerald-700";
       default:
         return "bg-slate-100 text-slate-700";
     }
@@ -202,6 +167,112 @@ if (isVendor) {
     (pos) => pos.status === "assigned_merchant" && !pos.vendor_id
   );
 
+  // =========================
+  // DASHBOARD DE COMISIONES
+  // =========================
+  let commissionData: {
+    installationsCount: number;
+    baseAmount: number;
+    baseTotal: number;
+    nextTarget: CommissionTarget | null;
+    progress: number;
+    missingForNextTarget: number;
+    potentialTotal: number;
+  } | null = null;
+
+  if (isVendor && user?.id) {
+    const currentVendor = vendors.find(
+      (v) => String(v.auth_user_id) === String(user.id)
+    );
+
+    if (currentVendor) {
+      const today = new Date();
+      const currentMonth = today.getMonth() + 1;
+      const currentYear = today.getFullYear();
+
+      const monthStart = `${currentYear}-${String(currentMonth).padStart(
+        2,
+        "0"
+      )}-01`;
+
+      const monthEndDate = new Date(currentYear, currentMonth, 0);
+      const monthEnd = `${currentYear}-${String(currentMonth).padStart(
+        2,
+        "0"
+      )}-${String(monthEndDate.getDate()).padStart(2, "0")}`;
+
+      const [{ data: config }, { data: installations }] = await Promise.all([
+        supabase
+          .from("commission_settings")
+          .select("*")
+          .eq("year", currentYear)
+          .eq("month", currentMonth)
+          .eq("is_active", true)
+          .maybeSingle(),
+        supabase
+          .from("installations")
+          .select("*")
+          .eq("vendor_id", currentVendor.id)
+          .eq("status", "completed")
+          .gte("install_date", monthStart)
+          .lte("install_date", monthEnd),
+      ]);
+
+      if (config) {
+        const typedConfig = config as CommissionSetting;
+
+        const { data: targets } = await supabase
+          .from("commission_targets")
+          .select("*")
+          .eq("commission_setting_id", typedConfig.id)
+          .order("installations_goal", { ascending: true });
+
+        const typedTargets = ((targets || []) as CommissionTarget[]).sort(
+          (a, b) => a.installations_goal - b.installations_goal
+        );
+
+        const typedInstallations = (installations || []) as InstallationRow[];
+        const installationsCount = typedInstallations.length;
+        const baseAmount = Number(typedConfig.base_amount_per_installation || 0);
+        const baseTotal = installationsCount * baseAmount;
+
+        let nextTarget: CommissionTarget | null = null;
+
+        for (const target of typedTargets) {
+          if (installationsCount < target.installations_goal) {
+            nextTarget = target;
+            break;
+          }
+        }
+
+        const progress = nextTarget
+          ? Math.min(
+              (installationsCount / nextTarget.installations_goal) * 100,
+              100
+            )
+          : 100;
+
+        const missingForNextTarget = nextTarget
+          ? Math.max(nextTarget.installations_goal - installationsCount, 0)
+          : 0;
+
+        const potentialTotal = nextTarget
+          ? baseTotal + Number(nextTarget.bonus_amount || 0)
+          : baseTotal;
+
+        commissionData = {
+          installationsCount,
+          baseAmount,
+          baseTotal,
+          nextTarget,
+          progress,
+          missingForNextTarget,
+          potentialTotal,
+        };
+      }
+    }
+  }
+
   return (
     <main className="h-[calc(100vh-120px)] overflow-hidden bg-gray-50 p-6">
       <div className="flex h-full flex-col overflow-hidden">
@@ -211,67 +282,6 @@ if (isVendor) {
 
         <div className="flex-1 overflow-auto pr-2">
           <div className="space-y-8">
-          {isVendor && commissionData && (
-  <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-    <h2 className="mb-4 text-xl font-semibold">
-      Progreso de comisiones
-    </h2>
-
-    <div className="grid gap-4 sm:grid-cols-3">
-      <div>
-        <p className="text-sm text-slate-500">Instalaciones del mes</p>
-        <p className="text-2xl font-bold">
-          {commissionData.installationsCount}
-        </p>
-      </div>
-
-      <div>
-        <p className="text-sm text-slate-500">Comisión acumulada</p>
-        <p className="text-2xl font-bold text-emerald-600">
-          ${commissionData.baseTotal.toLocaleString("es-AR")}
-        </p>
-      </div>
-
-      <div>
-        <p className="text-sm text-slate-500">Próximo objetivo</p>
-        <p className="text-2xl font-bold text-blue-600">
-          {commissionData.nextTarget
-            ? `${commissionData.nextTarget.installations_goal} instalaciones`
-            : "Objetivos cumplidos"}
-        </p>
-      </div>
-    </div>
-
-    <div className="mt-6">
-      <div className="mb-2 flex justify-between text-sm">
-        <span>Progreso</span>
-        <span>{Math.round(commissionData.progress)}%</span>
-      </div>
-
-      <div className="h-3 w-full rounded-full bg-gray-200">
-        <div
-          className="h-3 rounded-full bg-blue-600"
-          style={{ width: `${commissionData.progress}%` }}
-        />
-      </div>
-    </div>
-
-    {commissionData.nextTarget && (
-      <p className="mt-4 text-sm text-slate-600">
-        Te faltan{" "}
-        <strong>
-          {commissionData.nextTarget.installations_goal -
-            commissionData.installationsCount}
-        </strong>{" "}
-        instalaciones para ganar un bono de{" "}
-        <strong>
-          $
-          {commissionData.nextTarget.bonus_amount.toLocaleString("es-AR")}
-        </strong>
-      </p>
-    )}
-  </section>
-)}
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <p className="text-sm text-slate-500">Rol del usuario logueado</p>
               <p className="mt-2 text-2xl font-bold text-slate-900">
@@ -292,6 +302,101 @@ if (isVendor) {
                 </div>
               ))}
             </div>
+
+            {isVendor && commissionData && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="mb-4 text-xl font-semibold">
+                  Progreso de comisiones
+                </h2>
+
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-xl border border-slate-200 p-4">
+                    <p className="text-sm text-slate-500">
+                      Instalaciones del mes
+                    </p>
+                    <p className="mt-2 text-3xl font-bold text-slate-900">
+                      {commissionData.installationsCount}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 p-4">
+                    <p className="text-sm text-slate-500">
+                      Base por instalación
+                    </p>
+                    <p className="mt-2 text-3xl font-bold text-slate-900">
+                      ${commissionData.baseAmount.toLocaleString("es-AR")}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 p-4">
+                    <p className="text-sm text-slate-500">
+                      Comisión acumulada
+                    </p>
+                    <p className="mt-2 text-3xl font-bold text-emerald-600">
+                      ${commissionData.baseTotal.toLocaleString("es-AR")}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 p-4">
+                    <p className="text-sm text-slate-500">Próximo objetivo</p>
+                    <p className="mt-2 text-2xl font-bold text-blue-600">
+                      {commissionData.nextTarget
+                        ? `${commissionData.nextTarget.installations_goal} instalaciones`
+                        : "Objetivos cumplidos"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <div className="mb-2 flex items-center justify-between text-sm text-slate-600">
+                    <span>Progreso hacia el próximo objetivo</span>
+                    <span>{Math.round(commissionData.progress)}%</span>
+                  </div>
+
+                  <div className="h-4 w-full rounded-full bg-slate-200">
+                    <div
+                      className="h-4 rounded-full bg-blue-600 transition-all"
+                      style={{ width: `${commissionData.progress}%` }}
+                    />
+                  </div>
+                </div>
+
+                {commissionData.nextTarget ? (
+                  <div className="mt-5 rounded-xl bg-blue-50 p-4 text-sm text-slate-700">
+                    <p>
+                      Te faltan{" "}
+                      <span className="font-bold">
+                        {commissionData.missingForNextTarget}
+                      </span>{" "}
+                      instalaciones para alcanzar el objetivo de{" "}
+                      <span className="font-bold">
+                        {commissionData.nextTarget.installations_goal}
+                      </span>{" "}
+                      y sumar un bono de{" "}
+                      <span className="font-bold text-emerald-700">
+                        $
+                        {Number(
+                          commissionData.nextTarget.bonus_amount || 0
+                        ).toLocaleString("es-AR")}
+                      </span>
+                      .
+                    </p>
+
+                    <p className="mt-2">
+                      Total potencial al alcanzar ese objetivo:{" "}
+                      <span className="font-bold text-slate-900">
+                        $
+                        {commissionData.potentialTotal.toLocaleString("es-AR")}
+                      </span>
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-5 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-700">
+                    Ya alcanzaste todos los objetivos configurados para este mes.
+                  </div>
+                )}
+              </section>
+            )}
 
             {!isVendor && (
               <section>
