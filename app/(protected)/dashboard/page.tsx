@@ -36,6 +36,80 @@ export default async function DashboardPage() {
   const merchants = merchantRes.data || [];
 
   const isVendor = role === "vendedor";
+  // === DATOS DE COMISIONES (solo vendedor) ===
+let commissionData = null;
+
+if (isVendor) {
+  const today = new Date();
+  const currentMonth = today.getMonth() + 1;
+  const currentYear = today.getFullYear();
+
+  // Obtener vendedor logueado
+  const { data: currentVendor } = await supabase
+    .from("vendors")
+    .select("*")
+    .limit(1)
+    .single();
+
+  if (currentVendor) {
+    // instalaciones del mes
+    const { data: installations } = await supabase
+      .from("installations")
+      .select("*")
+      .eq("vendor_id", currentVendor.id)
+      .eq("status", "completed");
+
+    const installationsCount = installations?.length || 0;
+
+    // config del mes
+    const { data: config } = await supabase
+      .from("commission_settings")
+      .select("*")
+      .eq("year", currentYear)
+      .eq("month", currentMonth)
+      .eq("is_active", true)
+      .single();
+
+    // objetivos
+    const { data: targets } = await supabase
+      .from("commission_targets")
+      .select("*")
+      .eq("commission_setting_id", config?.id || "");
+
+    if (config) {
+      const base = config.base_amount_per_installation || 0;
+      const baseTotal = installationsCount * base;
+
+      // ordenar objetivos
+      const sortedTargets = (targets || []).sort(
+        (a, b) => a.installations_goal - b.installations_goal
+      );
+
+      let nextTarget = null;
+
+      for (const t of sortedTargets) {
+        if (installationsCount < t.installations_goal) {
+          nextTarget = t;
+          break;
+        }
+      }
+
+      const progress = nextTarget
+        ? Math.min(
+            (installationsCount / nextTarget.installations_goal) * 100,
+            100
+          )
+        : 100;
+
+      commissionData = {
+        installationsCount,
+        baseTotal,
+        nextTarget,
+        progress,
+      };
+    }
+  }
+}
   const dashboardTitle = isVendor ? "Mi Dashboard" : "Dashboard";
 
   const totalPos = posDevices.length;
@@ -137,6 +211,67 @@ export default async function DashboardPage() {
 
         <div className="flex-1 overflow-auto pr-2">
           <div className="space-y-8">
+          {isVendor && commissionData && (
+  <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <h2 className="mb-4 text-xl font-semibold">
+      Progreso de comisiones
+    </h2>
+
+    <div className="grid gap-4 sm:grid-cols-3">
+      <div>
+        <p className="text-sm text-slate-500">Instalaciones del mes</p>
+        <p className="text-2xl font-bold">
+          {commissionData.installationsCount}
+        </p>
+      </div>
+
+      <div>
+        <p className="text-sm text-slate-500">Comisión acumulada</p>
+        <p className="text-2xl font-bold text-emerald-600">
+          ${commissionData.baseTotal.toLocaleString("es-AR")}
+        </p>
+      </div>
+
+      <div>
+        <p className="text-sm text-slate-500">Próximo objetivo</p>
+        <p className="text-2xl font-bold text-blue-600">
+          {commissionData.nextTarget
+            ? `${commissionData.nextTarget.installations_goal} instalaciones`
+            : "Objetivos cumplidos"}
+        </p>
+      </div>
+    </div>
+
+    <div className="mt-6">
+      <div className="mb-2 flex justify-between text-sm">
+        <span>Progreso</span>
+        <span>{Math.round(commissionData.progress)}%</span>
+      </div>
+
+      <div className="h-3 w-full rounded-full bg-gray-200">
+        <div
+          className="h-3 rounded-full bg-blue-600"
+          style={{ width: `${commissionData.progress}%` }}
+        />
+      </div>
+    </div>
+
+    {commissionData.nextTarget && (
+      <p className="mt-4 text-sm text-slate-600">
+        Te faltan{" "}
+        <strong>
+          {commissionData.nextTarget.installations_goal -
+            commissionData.installationsCount}
+        </strong>{" "}
+        instalaciones para ganar un bono de{" "}
+        <strong>
+          $
+          {commissionData.nextTarget.bonus_amount.toLocaleString("es-AR")}
+        </strong>
+      </p>
+    )}
+  </section>
+)}
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <p className="text-sm text-slate-500">Rol del usuario logueado</p>
               <p className="mt-2 text-2xl font-bold text-slate-900">
