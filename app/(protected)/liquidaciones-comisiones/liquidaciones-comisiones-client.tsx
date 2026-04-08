@@ -218,11 +218,13 @@ export default function LiquidacionesComisionesClient() {
       .sort((a, b) => b.completed_installations - a.completed_installations);
   }, [vendors, installations, selectedSetting, selectedTargets, year, month]);
 
-  const savedRowsForPeriod = useMemo(() => {
-    return savedCommissions.filter(
-      (item) => item.year === year && item.month === month
-    );
-  }, [savedCommissions, year, month]);
+const savedRowsForPeriod = useMemo(() => {
+  return savedCommissions.filter(
+    (item) =>
+      Number(item.year) === Number(year) &&
+      Number(item.month) === Number(month)
+  );
+}, [savedCommissions, year, month]);
 
   const totalInstallations = previewRows.reduce(
     (acc, row) => acc + row.completed_installations,
