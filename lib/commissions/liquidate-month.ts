@@ -11,7 +11,28 @@ export async function liquidateMonth({
 }: LiquidateMonthParams) {
   const supabase = createAdminClient();
 
-  // 1) configuración del período
+  // 1) Si existe alguna liquidación cerrada para el período, bloquear recálculo
+  const { data: existingRows, error: existingRowsError } = await supabase
+    .from("vendor_commissions")
+    .select("id, status")
+    .eq("year", year)
+    .eq("month", month);
+
+  if (existingRowsError) {
+    throw new Error(
+      `Error verificando liquidaciones existentes: ${existingRowsError.message}`
+    );
+  }
+
+  const isClosed = (existingRows || []).some(
+    (row) => row.status === "closed"
+  );
+
+  if (isClosed) {
+    throw new Error("La liquidación de este período está cerrada y no puede recalcularse.");
+  }
+
+  // 2) Buscar configuración del período
   const { data: setting, error: settingError } = await supabase
     .from("commission_settings")
     .select("id, year, month, base_amount_per_installation")
@@ -29,7 +50,7 @@ export async function liquidateMonth({
     throw new Error(`No existe configuración de comisiones para ${month}/${year}`);
   }
 
-  // 2) objetivos del período
+  // 3) Buscar objetivos del período
   const { data: targets, error: targetsError } = await supabase
     .from("commission_targets")
     .select("id, commission_setting_id, installations_goal, bonus_amount")
@@ -40,7 +61,7 @@ export async function liquidateMonth({
     throw new Error(`Error buscando objetivos: ${targetsError.message}`);
   }
 
-  // 3) vendedores
+  // 4) Traer vendedores
   const { data: vendors, error: vendorsError } = await supabase
     .from("vendors")
     .select("id, name")
@@ -50,7 +71,7 @@ export async function liquidateMonth({
     throw new Error(`Error buscando vendedores: ${vendorsError.message}`);
   }
 
-  // 4) instalaciones completed
+  // 5) Traer instalaciones completed
   const { data: installations, error: installationsError } = await supabase
     .from("installations")
     .select("id, vendor_id, status, install_date")
@@ -60,7 +81,7 @@ export async function liquidateMonth({
     throw new Error(`Error buscando instalaciones: ${installationsError.message}`);
   }
 
-  // 5) filtrar por período usando install_date
+  // 6) Filtrar instalaciones del período
   const filteredInstallations = (installations || []).filter((installation) => {
     if (!installation.vendor_id) return false;
     if (!installation.install_date) return false;
@@ -72,7 +93,7 @@ export async function liquidateMonth({
     return installYear === year && installMonth === month;
   });
 
-  // 6) contar por vendedor
+  // 7) Contar instalaciones por vendedor
   const installationCountByVendor = new Map<string, number>();
 
   for (const row of filteredInstallations) {
@@ -85,7 +106,7 @@ export async function liquidateMonth({
     );
   }
 
-  // 7) preparar filas
+  // 8) Preparar filas para guardar
   const nowIso = new Date().toISOString();
 
   const rows = (vendors || [])
@@ -101,11 +122,13 @@ export async function liquidateMonth({
       const reachedTarget =
         [...(targets || [])]
           .filter(
-            (target) => completedInstallations >= Number(target.installations_goal || 0)
+            (target) =>
+              completedInstallations >= Number(target.installations_goal || 0)
           )
           .sort(
             (a, b) =>
-              Number(b.installations_goal || 0) - Number(a.installations_goal || 0)
+              Number(b.installations_goal || 0) -
+              Number(a.installations_goal || 0)
           )[0] || null;
 
       const bonusAmount = Number(reachedTarget?.bonus_amount || 0);
@@ -123,6 +146,7 @@ export async function liquidateMonth({
         total_amount: totalAmount,
         payment_status: "pending",
         notes: `Liquidación generada para ${month}/${year}`,
+        status: "draft",
         updated_at: nowIso,
       };
     })
@@ -138,7 +162,7 @@ export async function liquidateMonth({
     };
   }
 
-  // 8) upsert
+  // 9) Guardar con upsert
   const { data: savedRows, error: upsertError } = await supabase
     .from("vendor_commissions")
     .upsert(rows, {
