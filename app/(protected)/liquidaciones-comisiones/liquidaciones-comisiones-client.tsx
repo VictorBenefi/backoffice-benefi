@@ -45,6 +45,8 @@ type VendorCommission = {
   total_amount: number;
   payment_status: string;
   notes: string | null;
+  status: string | null;
+  closed_at: string | null;
   created_at: string;
 };
 
@@ -73,6 +75,7 @@ export default function LiquidacionesComisionesClient() {
   const [targets, setTargets] = useState<CommissionTarget[]>([]);
   const [savedCommissions, setSavedCommissions] = useState<VendorCommission[]>([]);
   const [loading, setLoading] = useState(false);
+  const [closing, setClosing] = useState(false);
 
   const monthLabel = (monthValue: number) => {
     const months = [
@@ -218,13 +221,18 @@ export default function LiquidacionesComisionesClient() {
       .sort((a, b) => b.completed_installations - a.completed_installations);
   }, [vendors, installations, selectedSetting, selectedTargets, year, month]);
 
-const savedRowsForPeriod = useMemo(() => {
-  return savedCommissions.filter(
-    (item) =>
-      Number(item.year) === Number(year) &&
-      Number(item.month) === Number(month)
-  );
-}, [savedCommissions, year, month]);
+  const savedRowsForPeriod = useMemo(() => {
+    return savedCommissions.filter(
+      (item) =>
+        Number(item.year) === Number(year) &&
+        Number(item.month) === Number(month)
+    );
+  }, [savedCommissions, year, month]);
+
+  const isPeriodClosed = useMemo(() => {
+    if (savedRowsForPeriod.length === 0) return false;
+    return savedRowsForPeriod.some((item) => item.status === "closed");
+  }, [savedRowsForPeriod]);
 
   const totalInstallations = previewRows.reduce(
     (acc, row) => acc + row.completed_installations,
@@ -252,6 +260,11 @@ const savedRowsForPeriod = useMemo(() => {
       return;
     }
 
+    if (isPeriodClosed) {
+      alert("La liquidación de este período está cerrada y no puede recalcularse.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -276,6 +289,50 @@ const savedRowsForPeriod = useMemo(() => {
       alert(error?.message || "Ocurrió un error al guardar la liquidación.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleCloseLiquidation() {
+    if (savedRowsForPeriod.length === 0) {
+      alert("Primero debés guardar la liquidación del período antes de cerrarla.");
+      return;
+    }
+
+    if (isPeriodClosed) {
+      alert("La liquidación de este período ya está cerrada.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `¿Querés cerrar la liquidación de ${monthLabel(month)} ${year}? Después no se podrá recalcular.`
+    );
+
+    if (!confirmed) return;
+
+    setClosing(true);
+
+    try {
+      const res = await fetch("/api/commissions/close", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ year, month }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || "No se pudo cerrar la liquidación.");
+      }
+
+      await loadData();
+      alert("Liquidación cerrada correctamente.");
+    } catch (error: any) {
+      console.error(error);
+      alert(error?.message || "Ocurrió un error al cerrar la liquidación.");
+    } finally {
+      setClosing(false);
     }
   }
 
@@ -313,6 +370,7 @@ const savedRowsForPeriod = useMemo(() => {
       "Objetivo alcanzado": row.reached_goal,
       "Bono extra": row.bonus_amount,
       Total: row.total_amount,
+      Estado: isPeriodClosed ? "Cerrada" : "Borrador",
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
@@ -404,6 +462,15 @@ const savedRowsForPeriod = useMemo(() => {
               font-size: 18px;
               font-weight: 700;
             }
+            .status {
+              display: inline-block;
+              padding: 4px 10px;
+              border-radius: 999px;
+              font-size: 12px;
+              font-weight: 700;
+              background: ${isPeriodClosed ? "#dcfce7" : "#fef3c7"};
+              color: ${isPeriodClosed ? "#166534" : "#92400e"};
+            }
             table {
               width: 100%;
               border-collapse: collapse;
@@ -433,6 +500,7 @@ const savedRowsForPeriod = useMemo(() => {
         <body>
           <h1>Liquidación mensual de comisiones</h1>
           <p class="muted">Período: ${monthLabel(month)} ${year}</p>
+          <p><span class="status">${isPeriodClosed ? "CERRADA" : "BORRADOR"}</span></p>
 
           <div class="section">
             <h3>Configuración aplicada</h3>
@@ -572,6 +640,18 @@ const savedRowsForPeriod = useMemo(() => {
                     {selectedSetting.is_active ? "Activa" : "Inactiva"}
                   </span>
                 </p>
+                <p>
+                  Estado liquidación:{" "}
+                  <span
+                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                      isPeriodClosed
+                        ? "bg-green-100 text-green-700"
+                        : "bg-amber-100 text-amber-700"
+                    }`}
+                  >
+                    {isPeriodClosed ? "Cerrada" : "Borrador"}
+                  </span>
+                </p>
                 {selectedSetting.notes && <p>Nota: {selectedSetting.notes}</p>}
                 <div className="pt-2">
                   <p className="font-semibold mb-1">Objetivos cargados:</p>
@@ -606,10 +686,27 @@ const savedRowsForPeriod = useMemo(() => {
               <button
                 type="button"
                 onClick={handleCalculateAndSave}
-                disabled={loading || !selectedSetting}
+                disabled={loading || !selectedSetting || isPeriodClosed}
                 className="rounded-md bg-black px-4 py-2 text-white disabled:opacity-50"
               >
-                {loading ? "Procesando..." : "Calcular y guardar liquidación"}
+                {loading
+                  ? "Procesando..."
+                  : isPeriodClosed
+                  ? "Liquidación cerrada"
+                  : "Calcular y guardar liquidación"}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCloseLiquidation}
+                disabled={closing || savedRowsForPeriod.length === 0 || isPeriodClosed}
+                className="rounded-md bg-rose-600 px-4 py-2 text-white disabled:opacity-50"
+              >
+                {closing
+                  ? "Cerrando..."
+                  : isPeriodClosed
+                  ? "Liquidación cerrada"
+                  : "Cerrar liquidación"}
               </button>
 
               <button
@@ -703,6 +800,7 @@ const savedRowsForPeriod = useMemo(() => {
                       <th className="px-4 py-3">Base</th>
                       <th className="px-4 py-3">Bono</th>
                       <th className="px-4 py-3">Total</th>
+                      <th className="px-4 py-3">Estado</th>
                       <th className="px-4 py-3">Estado pago</th>
                     </tr>
                   </thead>
@@ -726,6 +824,17 @@ const savedRowsForPeriod = useMemo(() => {
                           </td>
                           <td className="px-4 py-3 font-semibold">
                             {formatMoney(item.total_amount)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                item.status === "closed"
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-amber-100 text-amber-700"
+                              }`}
+                            >
+                              {item.status === "closed" ? "Cerrada" : "Borrador"}
+                            </span>
                           </td>
                           <td className="px-4 py-3">
                             <select
