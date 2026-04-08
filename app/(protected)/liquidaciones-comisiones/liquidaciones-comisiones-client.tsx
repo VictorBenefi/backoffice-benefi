@@ -244,75 +244,38 @@ export default function LiquidacionesComisionesClient() {
     0
   );
 
-  const handleCalculateAndSave = async () => {
+  async function handleCalculateAndSave() {
     if (!selectedSetting) {
       alert("No existe una configuración de comisiones para ese período.");
       return;
     }
 
-    if (previewRows.length === 0) {
-      alert("No hay instalaciones completadas para liquidar en ese período.");
-      return;
-    }
-
     setLoading(true);
 
-    for (const row of previewRows) {
-      const payload = {
-        vendor_id: row.vendor_id,
-        year,
-        month,
-        commission_setting_id: selectedSetting.id,
-        completed_installations: row.completed_installations,
-        base_amount_per_installation: row.base_amount_per_installation,
-        base_commission_amount: row.base_commission_amount,
-        bonus_amount: row.bonus_amount,
-        total_amount: row.total_amount,
-        payment_status: "pending",
-        notes: `Liquidación generada para ${monthLabel(month)} ${year}`,
-      };
+    try {
+      const res = await fetch("/api/commissions/liquidate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ year, month }),
+      });
 
-      const existing = savedCommissions.find(
-        (item) =>
-          item.vendor_id === row.vendor_id &&
-          item.year === year &&
-          item.month === month
-      );
+      const data = await res.json();
 
-      if (existing) {
-        const { error } = await supabase
-          .from("vendor_commissions")
-          .update(payload)
-          .eq("id", existing.id);
-
-        if (error) {
-          setLoading(false);
-          alert(
-            `Error actualizando liquidación de ${row.vendor_name}: ${error.message}`
-          );
-          console.error(error);
-          return;
-        }
-      } else {
-        const { error } = await supabase
-          .from("vendor_commissions")
-          .insert([payload]);
-
-        if (error) {
-          setLoading(false);
-          alert(
-            `Error guardando liquidación de ${row.vendor_name}: ${error.message}`
-          );
-          console.error(error);
-          return;
-        }
+      if (!res.ok) {
+        throw new Error(data?.error || "No se pudo liquidar el período.");
       }
-    }
 
-    setLoading(false);
-    await loadData();
-    alert("Liquidación mensual guardada correctamente.");
-  };
+      await loadData();
+      alert("Liquidación mensual guardada correctamente.");
+    } catch (error: any) {
+      console.error(error);
+      alert(error?.message || "Ocurrió un error al guardar la liquidación.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const handleUpdatePaymentStatus = async (
     id: string,
