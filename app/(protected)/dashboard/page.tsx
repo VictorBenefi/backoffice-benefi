@@ -74,15 +74,18 @@ export default async function DashboardPage() {
   const isVendor = role === "vendedor";
   const dashboardTitle = isVendor ? "Mi Dashboard" : "Dashboard";
 
-  const totalPos = posDevices.length;
-  const posInStock = posDevices.filter((p) => p.status === "in_stock").length;
-  const posMaintenance = posDevices.filter(
-    (p) => p.status === "maintenance"
-  ).length;
-  const posInactive = posDevices.filter((p) => p.status === "inactive").length;
-  const posWithoutMerchant = posDevices.filter(
-    (p) => p.status === "assigned_vendor" && !p.merchant_id
-  ).length;
+ const totalPos = posDevices.length;
+const posInStock = posDevices.filter((p) => p.status === "in_stock").length;
+const posMaintenance = posDevices.filter(
+  (p) => p.status === "maintenance"
+).length;
+const posInactive = posDevices.filter((p) => p.status === "inactive").length;
+
+// Para este dashboard, "Sin comercio" debe reflejar los POS disponibles en stock,
+// excluyendo mantenimiento y excluyendo POS ya asignados a comercios.
+const posWithoutMerchant = posDevices.filter(
+  (p) => p.status === "in_stock"
+).length;
 
   const vendorCards = [
     { title: "Mis POS", value: totalPos },
