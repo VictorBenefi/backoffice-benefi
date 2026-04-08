@@ -2,25 +2,16 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 type LiquidateMonthParams = {
   year: number;
-  month: number; // 1 a 12
+  month: number;
 };
 
-function getMonthRange(year: number, month: number) {
-  const from = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0));
-  const to = new Date(Date.UTC(year, month, 1, 0, 0, 0)); // siguiente mes
-  return {
-    from: from.toISOString(),
-    to: to.toISOString(),
-  };
-}
-
-export async function liquidateMonth({ year, month }: LiquidateMonthParams) {
+export async function liquidateMonth({
+  year,
+  month,
+}: LiquidateMonthParams) {
   const supabase = createAdminClient();
 
-  const { from, to } = getMonthRange(year, month);
-
-  // 1) Buscar configuración del mes
-  // Ajustá este query a tu esquema real si commission_settings usa otros campos
+  // 1) configuración del período
   const { data: setting, error: settingError } = await supabase
     .from("commission_settings")
     .select("id, year, month, base_amount_per_installation")
@@ -29,25 +20,27 @@ export async function liquidateMonth({ year, month }: LiquidateMonthParams) {
     .maybeSingle();
 
   if (settingError) {
-    throw new Error(`Error buscando configuración de comisión: ${settingError.message}`);
+    throw new Error(
+      `Error buscando configuración de comisión: ${settingError.message}`
+    );
   }
 
   if (!setting) {
-    throw new Error(`No existe commission_settings para ${month}/${year}`);
+    throw new Error(`No existe configuración de comisiones para ${month}/${year}`);
   }
 
-  // 2) Buscar objetivos del setting
+  // 2) objetivos del período
   const { data: targets, error: targetsError } = await supabase
     .from("commission_targets")
-    .select("id, commission_setting_id, installations_required, bonus_amount")
+    .select("id, commission_setting_id, installations_goal, bonus_amount")
     .eq("commission_setting_id", setting.id)
-    .order("installations_required", { ascending: true });
+    .order("installations_goal", { ascending: true });
 
   if (targetsError) {
     throw new Error(`Error buscando objetivos: ${targetsError.message}`);
   }
 
-  // 3) Traer vendedores
+  // 3) vendedores
   const { data: vendors, error: vendorsError } = await supabase
     .from("vendors")
     .select("id, name")
@@ -57,66 +50,95 @@ export async function liquidateMonth({ year, month }: LiquidateMonthParams) {
     throw new Error(`Error buscando vendedores: ${vendorsError.message}`);
   }
 
-  // 4) Traer instalaciones completed del mes
+  // 4) instalaciones completed
   const { data: installations, error: installationsError } = await supabase
     .from("installations")
-    .select("id, vendor_id, installed_at, created_at, status")
-    .eq("status", "completed")
-    .gte("installed_at", from)
-    .lt("installed_at", to);
+    .select("id, vendor_id, status, install_date")
+    .eq("status", "completed");
 
   if (installationsError) {
     throw new Error(`Error buscando instalaciones: ${installationsError.message}`);
   }
 
-  // Si en tu tabla no usás installed_at y usás created_at, cambiá el filtro arriba.
+  // 5) filtrar por período usando install_date
+  const filteredInstallations = (installations || []).filter((installation) => {
+    if (!installation.vendor_id) return false;
+    if (!installation.install_date) return false;
 
-  // 5) Contar instalaciones por vendedor
+    const installDate = new Date(`${installation.install_date}T00:00:00`);
+    const installYear = installDate.getFullYear();
+    const installMonth = installDate.getMonth() + 1;
+
+    return installYear === year && installMonth === month;
+  });
+
+  // 6) contar por vendedor
   const installationCountByVendor = new Map<string, number>();
 
-  for (const row of installations ?? []) {
+  for (const row of filteredInstallations) {
     const vendorId = row.vendor_id;
     if (!vendorId) continue;
 
     installationCountByVendor.set(
       vendorId,
-      (installationCountByVendor.get(vendorId) ?? 0) + 1
+      (installationCountByVendor.get(vendorId) || 0) + 1
     );
   }
 
-  // 6) Construir liquidaciones
-  const rows = (vendors ?? []).map((vendor) => {
-    const completedInstallations = installationCountByVendor.get(vendor.id) ?? 0;
-    const baseAmount = Number(setting.base_amount_per_installation ?? 0);
-    const baseCommissionTotal = completedInstallations * baseAmount;
+  // 7) preparar filas
+  const nowIso = new Date().toISOString();
 
-    const achievedTarget =
-      [...(targets ?? [])]
-        .filter((t) => completedInstallations >= Number(t.installations_required ?? 0))
-        .sort(
-          (a, b) =>
-            Number(b.installations_required ?? 0) - Number(a.installations_required ?? 0)
-        )[0] ?? null;
+  const rows = (vendors || [])
+    .map((vendor) => {
+      const completedInstallations =
+        installationCountByVendor.get(vendor.id) || 0;
 
-    const bonusAmount = Number(achievedTarget?.bonus_amount ?? 0);
-    const totalCommission = baseCommissionTotal + bonusAmount;
+      if (completedInstallations <= 0) return null;
 
+      const baseAmount = Number(setting.base_amount_per_installation || 0);
+      const baseCommissionAmount = completedInstallations * baseAmount;
+
+      const reachedTarget =
+        [...(targets || [])]
+          .filter(
+            (target) => completedInstallations >= Number(target.installations_goal || 0)
+          )
+          .sort(
+            (a, b) =>
+              Number(b.installations_goal || 0) - Number(a.installations_goal || 0)
+          )[0] || null;
+
+      const bonusAmount = Number(reachedTarget?.bonus_amount || 0);
+      const totalAmount = baseCommissionAmount + bonusAmount;
+
+      return {
+        vendor_id: vendor.id,
+        year,
+        month,
+        commission_setting_id: setting.id,
+        completed_installations: completedInstallations,
+        base_amount_per_installation: baseAmount,
+        base_commission_amount: baseCommissionAmount,
+        bonus_amount: bonusAmount,
+        total_amount: totalAmount,
+        payment_status: "pending",
+        notes: `Liquidación generada para ${month}/${year}`,
+        updated_at: nowIso,
+      };
+    })
+    .filter(Boolean);
+
+  if (rows.length === 0) {
     return {
-      vendor_id: vendor.id,
-      year,
-      month,
-      commission_setting_id: setting.id,
-      completed_installations: completedInstallations,
-      base_amount_per_installation: baseAmount,
-      base_commission_total: baseCommissionTotal,
-      bonus_amount: bonusAmount,
-      total_commission: totalCommission,
-      liquidated_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      ok: true,
+      period: { year, month },
+      totalVendors: 0,
+      totalInstallations: 0,
+      rows: [],
     };
-  });
+  }
 
-  // 7) Upsert
+  // 8) upsert
   const { data: savedRows, error: upsertError } = await supabase
     .from("vendor_commissions")
     .upsert(rows, {
@@ -132,7 +154,7 @@ export async function liquidateMonth({ year, month }: LiquidateMonthParams) {
     ok: true,
     period: { year, month },
     totalVendors: rows.length,
-    totalInstallations: installations?.length ?? 0,
+    totalInstallations: filteredInstallations.length,
     rows: savedRows,
   };
 }
