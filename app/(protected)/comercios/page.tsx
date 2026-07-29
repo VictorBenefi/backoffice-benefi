@@ -35,9 +35,27 @@ type Merchant = {
   address: string | null;
   zone: string | null;
 
+  activity: string | null;
+  tax_condition: string | null;
+  street: string | null;
+  street_number: string | null;
+  floor: string | null;
+  apartment: string | null;
+  postal_code: string | null;
+  city: string | null;
+  province: string | null;
+
   entity_type: string | null;
   representative_name: string | null;
   representative_document: string | null;
+  representative_cuit: string | null;
+  representative_birth_date: string | null;
+  representative_email: string | null;
+
+  bank_name: string | null;
+  bank_account_holder: string | null;
+  bank_cbu: string | null;
+  bank_alias: string | null;
 
   contracted_services: string[] | null;
 
@@ -77,9 +95,26 @@ type FormData = {
   address: string;
   zone: string;
 
+  activity: string;
+  tax_condition: string;
+  street: string;
+  street_number: string;
+  floor: string;
+  apartment: string;
+  postal_code: string;
+  city: string;
+  province: string;
+
   entity_type: string;
   representative_name: string;
-  representative_document: string;
+  representative_cuit: string;
+  representative_birth_date: string;
+  representative_email: string;
+
+  bank_name: string;
+  bank_account_holder: string;
+  bank_cbu: string;
+  bank_alias: string;
 
   contracted_services: string[];
 
@@ -95,9 +130,26 @@ const emptyForm: FormData = {
   address: "",
   zone: "",
 
+  activity: "",
+  tax_condition: "",
+  street: "",
+  street_number: "",
+  floor: "",
+  apartment: "",
+  postal_code: "",
+  city: "",
+  province: "",
+
   entity_type: "",
   representative_name: "",
-  representative_document: "",
+  representative_cuit: "",
+  representative_birth_date: "",
+  representative_email: "",
+
+  bank_name: "",
+  bank_account_holder: "",
+  bank_cbu: "",
+  bank_alias: "",
 
   contracted_services: [],
 
@@ -135,6 +187,42 @@ const serviceOptions = [
     description:
       "Portal web personalizado para clientes, beneficios y promociones.",
   },
+];
+
+
+const provinceOptions = [
+  "Buenos Aires",
+  "Ciudad Autónoma de Buenos Aires",
+  "Catamarca",
+  "Chaco",
+  "Chubut",
+  "Córdoba",
+  "Corrientes",
+  "Entre Ríos",
+  "Formosa",
+  "Jujuy",
+  "La Pampa",
+  "La Rioja",
+  "Mendoza",
+  "Misiones",
+  "Neuquén",
+  "Río Negro",
+  "Salta",
+  "San Juan",
+  "San Luis",
+  "Santa Cruz",
+  "Santa Fe",
+  "Santiago del Estero",
+  "Tierra del Fuego",
+  "Tucumán",
+];
+
+const taxConditionOptions = [
+  "Responsable inscripto",
+  "Monotributista",
+  "Exento",
+  "Consumidor final",
+  "No responsable",
 ];
 
 const categoryLabels: Record<string, string> = {
@@ -690,22 +778,60 @@ const refreshMerchantDocumentation = async (
       ? currentVendor?.id || null
       : formData.vendor_id || null;
 
+    const fullAddress = [
+      [formData.street.trim(), formData.street_number.trim()]
+        .filter(Boolean)
+        .join(" "),
+      formData.floor.trim() ? `Piso ${formData.floor.trim()}` : "",
+      formData.apartment.trim()
+        ? `Dpto. ${formData.apartment.trim()}`
+        : "",
+      formData.city.trim(),
+      formData.province.trim(),
+    ]
+      .filter(Boolean)
+      .join(", ");
+
     const payload = {
       name: formData.name.trim(),
       legal_name: nullableText(formData.legal_name),
       email: nullableText(formData.email)?.toLowerCase() || null,
       cuit: formData.cuit.trim(),
       phone: nullableText(formData.phone),
-      address: nullableText(formData.address),
+      address: nullableText(fullAddress || formData.address),
       zone: nullableText(formData.zone),
+
+      activity: nullableText(formData.activity),
+      tax_condition: nullableText(formData.tax_condition),
+      street: nullableText(formData.street),
+      street_number: nullableText(formData.street_number),
+      floor: nullableText(formData.floor),
+      apartment: nullableText(formData.apartment),
+      postal_code: nullableText(formData.postal_code),
+      city: nullableText(formData.city),
+      province: nullableText(formData.province),
 
       entity_type: formData.entity_type,
       representative_name: nullableText(
         formData.representative_name
       ),
       representative_document: nullableText(
-        formData.representative_document
+        formData.representative_cuit
       ),
+      representative_cuit: nullableText(
+        formData.representative_cuit
+      ),
+      representative_birth_date:
+        formData.representative_birth_date || null,
+      representative_email:
+        nullableText(formData.representative_email)?.toLowerCase() || null,
+
+      bank_name: nullableText(formData.bank_name),
+      bank_account_holder: nullableText(
+        formData.bank_account_holder
+      ),
+      bank_cbu: nullableText(formData.bank_cbu),
+      bank_alias: nullableText(formData.bank_alias),
 
       contracted_services: formData.contracted_services,
 
@@ -802,10 +928,30 @@ const refreshMerchantDocumentation = async (
       address: merchant.address || "",
       zone: merchant.zone || "",
 
+      activity: merchant.activity || "",
+      tax_condition: merchant.tax_condition || "",
+      street: merchant.street || "",
+      street_number: merchant.street_number || "",
+      floor: merchant.floor || "",
+      apartment: merchant.apartment || "",
+      postal_code: merchant.postal_code || "",
+      city: merchant.city || "",
+      province: merchant.province || "",
+
       entity_type: merchant.entity_type || "",
       representative_name: merchant.representative_name || "",
-      representative_document:
-        merchant.representative_document || "",
+      representative_cuit:
+        merchant.representative_cuit ||
+        merchant.representative_document ||
+        "",
+      representative_birth_date:
+        merchant.representative_birth_date || "",
+      representative_email: merchant.representative_email || "",
+
+      bank_name: merchant.bank_name || "",
+      bank_account_holder: merchant.bank_account_holder || "",
+      bank_cbu: merchant.bank_cbu || "",
+      bank_alias: merchant.bank_alias || "",
 
       contracted_services: merchant.contracted_services || [],
 
@@ -865,6 +1011,10 @@ const refreshMerchantDocumentation = async (
         (merchant.cuit || "").toLowerCase().includes(text) ||
         (merchant.phone || "").toLowerCase().includes(text) ||
         (merchant.address || "").toLowerCase().includes(text) ||
+        (merchant.street || "").toLowerCase().includes(text) ||
+        (merchant.city || "").toLowerCase().includes(text) ||
+        (merchant.province || "").toLowerCase().includes(text) ||
+        (merchant.activity || "").toLowerCase().includes(text) ||
         (merchant.zone || "").toLowerCase().includes(text) ||
         (merchant.representative_name || "")
           .toLowerCase()
@@ -947,86 +1097,73 @@ const refreshMerchantDocumentation = async (
             <FormSection
               number="1"
               title="Datos comerciales"
-              description="Información principal para identificar y contactar al comercio."
+              description="Información principal, fiscal y de domicilio del comercio."
             >
               <div className="grid gap-4 md:grid-cols-2">
-                <Field
-                  label="Nombre de fantasía"
-                  required
-                  className="md:col-span-2"
-                >
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={formData.name}
-                    onChange={(event) =>
-                      handleChange("name", event.target.value)
-                    }
-                    placeholder="Ej: Farmacia Centro"
-                  />
+                <Field label="Nombre de fantasía" required className="md:col-span-2">
+                  <input type="text" className={inputClass} value={formData.name} onChange={(event) => handleChange("name", event.target.value)} placeholder="Ej: Farmacia Centro" />
                 </Field>
 
                 <Field label="Email">
-                  <input
-                    type="email"
-                    className={inputClass}
-                    value={formData.email}
-                    onChange={(event) =>
-                      handleChange("email", event.target.value)
-                    }
-                    placeholder="comercio@email.com"
-                  />
+                  <input type="email" className={inputClass} value={formData.email} onChange={(event) => handleChange("email", event.target.value)} placeholder="comercio@email.com" />
                 </Field>
 
                 <Field label="CUIT" required>
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={formData.cuit}
-                    onChange={(event) =>
-                      handleChange("cuit", event.target.value)
-                    }
-                    placeholder="30-12345678-9"
-                  />
+                  <input type="text" className={inputClass} value={formData.cuit} onChange={(event) => handleChange("cuit", event.target.value)} placeholder="30-12345678-9" />
                 </Field>
 
                 <Field label="Teléfono">
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={formData.phone}
-                    onChange={(event) =>
-                      handleChange("phone", event.target.value)
-                    }
-                    placeholder="387..."
-                  />
+                  <input type="text" className={inputClass} value={formData.phone} onChange={(event) => handleChange("phone", event.target.value)} placeholder="387..." />
+                </Field>
+
+                <Field label="Actividad comercial">
+                  <input type="text" className={inputClass} value={formData.activity} onChange={(event) => handleChange("activity", event.target.value)} placeholder="Ej: Venta minorista de combustibles" />
+                </Field>
+
+                <Field label="Condición fiscal">
+                  <select className={inputClass} value={formData.tax_condition} onChange={(event) => handleChange("tax_condition", event.target.value)}>
+                    <option value="">Seleccionar condición fiscal</option>
+                    {taxConditionOptions.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Calle">
+                  <input type="text" className={inputClass} value={formData.street} onChange={(event) => handleChange("street", event.target.value)} placeholder="Ej: Av. San Martín" />
+                </Field>
+
+                <Field label="Número">
+                  <input type="text" className={inputClass} value={formData.street_number} onChange={(event) => handleChange("street_number", event.target.value)} placeholder="1463" />
+                </Field>
+
+                <Field label="Piso">
+                  <input type="text" className={inputClass} value={formData.floor} onChange={(event) => handleChange("floor", event.target.value)} placeholder="Ej: 2" />
+                </Field>
+
+                <Field label="Departamento">
+                  <input type="text" className={inputClass} value={formData.apartment} onChange={(event) => handleChange("apartment", event.target.value)} placeholder="Ej: B" />
+                </Field>
+
+                <Field label="Código postal">
+                  <input type="text" className={inputClass} value={formData.postal_code} onChange={(event) => handleChange("postal_code", event.target.value)} placeholder="Ej: 4400" />
+                </Field>
+
+                <Field label="Localidad">
+                  <input type="text" className={inputClass} value={formData.city} onChange={(event) => handleChange("city", event.target.value)} placeholder="Ej: Salta" />
+                </Field>
+
+                <Field label="Provincia">
+                  <select className={inputClass} value={formData.province} onChange={(event) => handleChange("province", event.target.value)}>
+                    <option value="">Seleccionar provincia</option>
+                    {provinceOptions.map((province) => (
+                      <option key={province} value={province}>{province}</option>
+                    ))}
+                  </select>
                 </Field>
 
                 <Field label="Zona">
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={formData.zone}
-                    onChange={(event) =>
-                      handleChange("zone", event.target.value)
-                    }
-                    placeholder="Salta Centro"
-                  />
-                </Field>
-
-                <Field
-                  label="Dirección"
-                  className="md:col-span-2"
-                >
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={formData.address}
-                    onChange={(event) =>
-                      handleChange("address", event.target.value)
-                    }
-                    placeholder="Av. Belgrano 123"
-                  />
+                  <input type="text" className={inputClass} value={formData.zone} onChange={(event) => handleChange("zone", event.target.value)} placeholder="Ej: Salta Centro" />
                 </Field>
               </div>
             </FormSection>
@@ -1035,93 +1172,34 @@ const refreshMerchantDocumentation = async (
             <FormSection
               number="2"
               title="Datos legales"
-              description="Información societaria y del representante del comercio."
+              description="Información societaria y del representante legal."
             >
               <div className="grid gap-4 md:grid-cols-2">
-                <Field
-                  label="Razón social"
-                  className="md:col-span-2"
-                >
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={formData.legal_name}
-                    onChange={(event) =>
-                      handleChange(
-                        "legal_name",
-                        event.target.value
-                      )
-                    }
-                    placeholder="Ej: Farmacia Centro S.R.L."
-                  />
+                <Field label="Razón social" className="md:col-span-2">
+                  <input type="text" className={inputClass} value={formData.legal_name} onChange={(event) => handleChange("legal_name", event.target.value)} placeholder="Ej: Farmacia Centro S.R.L." />
                 </Field>
 
-                <Field
-                  label="Tipo de entidad"
-                  required
-                  className="md:col-span-2"
-                >
+                <Field label="Tipo de entidad" required className="md:col-span-2">
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <EntityOption
-                      title="Persona humana"
-                      description="Titular individual, monotributista o responsable inscripto."
-                      selected={
-                        formData.entity_type === "individual"
-                      }
-                      onClick={() =>
-                        handleChange(
-                          "entity_type",
-                          "individual"
-                        )
-                      }
-                    />
-
-                    <EntityOption
-                      title="Empresa"
-                      description="SA, SAS, SRL, cooperativa u otra persona jurídica."
-                      selected={
-                        formData.entity_type === "company"
-                      }
-                      onClick={() =>
-                        handleChange(
-                          "entity_type",
-                          "company"
-                        )
-                      }
-                    />
+                    <EntityOption title="Persona humana" description="Titular individual, monotributista o responsable inscripto." selected={formData.entity_type === "individual"} onClick={() => handleChange("entity_type", "individual")} />
+                    <EntityOption title="Empresa" description="SA, SAS, SRL, cooperativa u otra persona jurídica." selected={formData.entity_type === "company"} onClick={() => handleChange("entity_type", "company")} />
                   </div>
                 </Field>
 
                 <Field label="Representante legal">
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={formData.representative_name}
-                    onChange={(event) =>
-                      handleChange(
-                        "representative_name",
-                        event.target.value
-                      )
-                    }
-                    placeholder="Nombre y apellido"
-                  />
+                  <input type="text" className={inputClass} value={formData.representative_name} onChange={(event) => handleChange("representative_name", event.target.value)} placeholder="Nombre y apellido" />
                 </Field>
 
-                <Field label="DNI del representante">
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={
-                      formData.representative_document
-                    }
-                    onChange={(event) =>
-                      handleChange(
-                        "representative_document",
-                        event.target.value
-                      )
-                    }
-                    placeholder="Ej: 25.123.456"
-                  />
+                <Field label="CUIT/CUIL del representante">
+                  <input type="text" className={inputClass} value={formData.representative_cuit} onChange={(event) => handleChange("representative_cuit", event.target.value)} placeholder="20-25123456-7" />
+                </Field>
+
+                <Field label="Fecha de nacimiento">
+                  <input type="date" className={inputClass} value={formData.representative_birth_date} onChange={(event) => handleChange("representative_birth_date", event.target.value)} />
+                </Field>
+
+                <Field label="Email del representante">
+                  <input type="email" className={inputClass} value={formData.representative_email} onChange={(event) => handleChange("representative_email", event.target.value)} placeholder="representante@email.com" />
                 </Field>
               </div>
             </FormSection>
@@ -1185,9 +1263,34 @@ const refreshMerchantDocumentation = async (
               </div>
             </FormSection>
 
-            {/* DOCUMENTACIÓN */}
+            {/* DATOS BANCARIOS */}
             <FormSection
               number="4"
+              title="Datos bancarios"
+              description="Cuenta declarada por el comercio para recibir liquidaciones."
+            >
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="Banco">
+                  <input type="text" className={inputClass} value={formData.bank_name} onChange={(event) => handleChange("bank_name", event.target.value)} placeholder="Ej: Banco Macro" />
+                </Field>
+
+                <Field label="Titular de la cuenta">
+                  <input type="text" className={inputClass} value={formData.bank_account_holder} onChange={(event) => handleChange("bank_account_holder", event.target.value)} placeholder="Nombre o razón social" />
+                </Field>
+
+                <Field label="CBU">
+                  <input type="text" inputMode="numeric" maxLength={22} className={inputClass} value={formData.bank_cbu} onChange={(event) => handleChange("bank_cbu", event.target.value.replace(/\D/g, "").slice(0, 22))} placeholder="22 dígitos" />
+                </Field>
+
+                <Field label="Alias">
+                  <input type="text" className={inputClass} value={formData.bank_alias} onChange={(event) => handleChange("bank_alias", event.target.value)} placeholder="Ej: COMERCIO.BENEFI" />
+                </Field>
+              </div>
+            </FormSection>
+
+            {/* DOCUMENTACIÓN */}
+            <FormSection
+              number="5"
               title="Documentación requerida"
               description="Los requisitos se cargan automáticamente según el tipo de entidad."
             >
@@ -1256,7 +1359,7 @@ const refreshMerchantDocumentation = async (
 
             {/* ASIGNACIÓN */}
             <FormSection
-              number="5"
+              number="6"
               title="Asignación comercial"
               description="Define qué vendedor será responsable del comercio."
               last
@@ -1483,6 +1586,21 @@ const refreshMerchantDocumentation = async (
                       <MerchantDetail
                         label="Teléfono"
                         value={merchant.phone || "-"}
+                      />
+
+                      <MerchantDetail
+                        label="Actividad"
+                        value={merchant.activity || "-"}
+                      />
+
+                      <MerchantDetail
+                        label="Localidad"
+                        value={merchant.city || "-"}
+                      />
+
+                      <MerchantDetail
+                        label="Provincia"
+                        value={merchant.province || "-"}
                       />
 
                       <MerchantDetail
