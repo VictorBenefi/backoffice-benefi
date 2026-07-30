@@ -6,8 +6,8 @@ export default function PublicLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="es">
-      <body className="bg-slate-100 text-slate-900">{children}</body>
-    </html>
+    <div className="min-h-screen bg-slate-100 text-slate-900">
+      {children}
+    </div>
   );
 }

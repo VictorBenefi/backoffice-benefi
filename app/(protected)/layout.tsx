@@ -15,6 +15,11 @@ export default async function ProtectedLayout({
       roles: ["admin", "supervisor", "operaciones", "soporte", "vendedor"],
     },
     {
+      href: "/mis-comisiones",
+      label: "Mis comisiones",
+      roles: ["vendedor"],
+    },
+    {
       href: "/vendedores",
       label: "Vendedores",
       roles: ["admin", "supervisor"],
