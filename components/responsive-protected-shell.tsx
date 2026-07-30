@@ -51,8 +51,8 @@ export default function ResponsiveProtectedShell({
   };
 
   const sidebarContent = (
-    <div className="flex h-full flex-col justify-between">
-      <div>
+    <div className="flex h-full flex-col">
+      <div className="flex-1 overflow-y-auto">
         <div className="border-b border-slate-800 px-6 py-6">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -143,7 +143,7 @@ export default function ResponsiveProtectedShell({
             onClick={() => setMobileMenuOpen(false)}
           />
 
-          <aside className="relative h-full w-[min(84vw,320px)] bg-[#050816] text-white shadow-2xl">
+          <aside className="relative h-dvh w-[min(84vw,320px)] overflow-hidden bg-[#050816] text-white shadow-2xl">
             {sidebarContent}
           </aside>
         </div>
