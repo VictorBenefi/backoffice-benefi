@@ -1040,7 +1040,7 @@ const refreshMerchantDocumentation = async (
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 p-4 md:p-6">
+    <main className="min-h-screen min-w-0 overflow-x-hidden bg-slate-50 p-4 md:p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-950 md:text-3xl">
           Comercios
@@ -1065,9 +1065,9 @@ const refreshMerchantDocumentation = async (
         </div>
       )}
 
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(380px,0.8fr)]">
+      <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(380px,0.8fr)]">
         {/* FORMULARIO */}
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-4 py-4 md:px-7 md:py-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -1439,7 +1439,7 @@ const refreshMerchantDocumentation = async (
         </section>
 
         {/* LISTADO */}
-        <section className="rounded-2xl border border-slate-200 bg-white shadow-sm xl:sticky xl:top-6">
+        <section className="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm xl:sticky xl:top-6">
           <div className="border-b border-slate-200 p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -1458,10 +1458,10 @@ const refreshMerchantDocumentation = async (
               </span>
             </div>
 
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row">
               <input
                 type="text"
-                className={inputClass}
+                className={`${inputClass} min-w-0`}
                 value={search}
                 onChange={(event) =>
                   setSearch(event.target.value)
@@ -1472,7 +1472,7 @@ const refreshMerchantDocumentation = async (
               <button
                 type="button"
                 onClick={() => setSearch("")}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:w-auto"
               >
                 Limpiar
               </button>
@@ -1684,7 +1684,7 @@ function FormSection({
         !last ? "border-b border-slate-200" : ""
       }`}
     >
-      <div className="mb-4 flex items-start gap-3">
+      <div className="mb-4 flex items-center gap-3">
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-950 text-xs font-semibold text-white md:h-8 md:w-8 md:text-sm">
           {number}
         </div>
