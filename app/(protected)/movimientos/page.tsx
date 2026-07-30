@@ -3,6 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/client";
+import NotificationBanner, {
+  type NotificationMessage,
+} from "@/components/ui/NotificationBanner";
+import {
+  EmptyState,
+  FormCard,
+  PageHeader,
+  PrimaryButton,
+  SecondaryButton,
+  StatusBadge,
+  fieldClassName,
+} from "@/components/ui";
 
 type Movement = {
   id: string;
@@ -27,6 +39,8 @@ export default function MovimientosPage() {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [message, setMessage] =
+    useState<NotificationMessage | null>(null);
 
   const loadMovements = async () => {
     const { data, error } = await supabase
@@ -36,6 +50,10 @@ export default function MovimientosPage() {
 
     if (error) {
       console.error("Error cargando movimientos:", error.message);
+      setMessage({
+        type: "error",
+        text: `No se pudieron cargar los movimientos: ${error.message}`,
+      });
       return;
     }
 
@@ -102,21 +120,26 @@ export default function MovimientosPage() {
   };
 
   const handleExportExcel = () => {
+    setMessage(null);
+
     if (filtered.length === 0) {
-      alert("No hay movimientos para exportar.");
+      setMessage({
+        type: "warning",
+        text: "No hay movimientos para exportar.",
+      });
       return;
     }
 
-    const exportData = filtered.map((m) => ({
-      Fecha: formatDate(m.created_at),
-      Tipo: getTypeLabel(m.type),
-      "Código POS": m.pos_code || "-",
-      Vendedor: m.vendor_name || "-",
-      Comercio: m.merchant_name || "-",
-      Usuario: m.user_name || "-",
-      "Email usuario": m.user_email || "-",
-      Rol: m.user_role || "-",
-      Nota: m.notes || "-",
+    const exportData = filtered.map((movement) => ({
+      Fecha: formatDate(movement.created_at),
+      Tipo: getTypeLabel(movement.type),
+      "Código POS": movement.pos_code || "-",
+      Vendedor: movement.vendor_name || "-",
+      Comercio: movement.merchant_name || "-",
+      Usuario: movement.user_name || "-",
+      "Email usuario": movement.user_email || "-",
+      Rol: movement.user_role || "-",
+      Nota: movement.notes || "-",
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
@@ -124,130 +147,261 @@ export default function MovimientosPage() {
     XLSX.utils.book_append_sheet(workbook, worksheet, "Movimientos");
 
     XLSX.writeFile(workbook, getExportFileName());
+
+    setMessage({
+      type: "success",
+      text: "El archivo Excel se exportó correctamente.",
+    });
+  };
+
+  const totalStockEntries = movements.filter(
+    (movement) => movement.type === "ingreso_stock"
+  ).length;
+
+  const totalCompletedInstallations = movements.filter(
+    (movement) => movement.type === "instalacion_completada"
+  ).length;
+
+  const totalMaintenance = movements.filter(
+    (movement) => movement.type === "mantenimiento"
+  ).length;
+
+  const getMovementTone = (
+    type: string
+  ):
+    | "neutral"
+    | "info"
+    | "success"
+    | "warning"
+    | "danger"
+    | "violet"
+    | "teal" => {
+    switch (type) {
+      case "ingreso_stock":
+      case "retorno_stock":
+        return "success";
+      case "asignado_vendedor":
+        return "info";
+      case "asignado_comercio":
+        return "violet";
+      case "instalacion_completada":
+        return "teal";
+      case "mantenimiento":
+        return "warning";
+      case "baja":
+        return "danger";
+      default:
+        return "neutral";
+    }
   };
 
   return (
-    <main className="p-6 bg-gray-50 min-h-screen">
-      <div className="flex flex-col gap-3 mb-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Movimientos de POS</h1>
-          <p className="text-sm text-slate-500">
-            Historial operativo de movimientos realizados sobre terminales POS
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleExportExcel}
-          className="rounded-md bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-700"
-        >
-          Exportar Excel
-        </button>
-      </div>
-
-      <div className="grid md:grid-cols-3 gap-3 mb-4">
-        <input
-          type="text"
-          placeholder="Buscar por POS, vendedor, comercio, usuario, rol o nota..."
-          className="border rounded-md px-3 py-2 text-sm"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+    <main className="min-h-screen bg-gray-50 p-6">
+      <div className="mx-auto max-w-[1800px]">
+        <PageHeader
+          title="Movimientos de POS"
+          description="Historial operativo de todas las acciones realizadas sobre los equipos POS."
         />
 
-        <select
-          className="border rounded-md px-3 py-2 text-sm"
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
-        >
-          <option value="">Todos los movimientos</option>
-          <option value="ingreso_stock">Ingreso a stock</option>
-          <option value="retorno_stock">Retorno a stock</option>
-          <option value="asignado_comercio">Asignado a comercio</option>
-          <option value="asignado_vendedor">Asignado a vendedor</option>
-          <option value="mantenimiento">Mantenimiento</option>
-          <option value="baja">Baja</option>
-          <option value="instalacion_completada">Instalación completada</option>
-        </select>
+        <NotificationBanner
+          message={message}
+          onClose={() => setMessage(null)}
+          className="mb-5"
+        />
 
-        <button
-          type="button"
-          onClick={() => {
-            setSearch("");
-            setTypeFilter("");
-          }}
-          className="border rounded-md px-3 py-2 text-sm hover:bg-slate-50"
-        >
-          Limpiar filtros
-        </button>
-      </div>
+        <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm font-medium text-slate-500">
+              Movimientos totales
+            </p>
+            <p className="mt-2 text-3xl font-bold text-slate-900">
+              {movements.length}
+            </p>
+          </div>
 
-      <div className="bg-white rounded-xl border h-[700px] flex flex-col">
-        <div className="px-4 py-2 border-b text-sm text-slate-500">
-          {filtered.length} movimientos de {movements.length} totales
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm font-medium text-slate-500">
+              Ingresos a stock
+            </p>
+            <p className="mt-2 text-3xl font-bold text-slate-900">
+              {totalStockEntries}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm font-medium text-slate-500">
+              Instalaciones completadas
+            </p>
+            <p className="mt-2 text-3xl font-bold text-slate-900">
+              {totalCompletedInstallations}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm font-medium text-slate-500">
+              Enviados a mantenimiento
+            </p>
+            <p className="mt-2 text-3xl font-bold text-slate-900">
+              {totalMaintenance}
+            </p>
+          </div>
         </div>
 
-        <div className="overflow-auto flex-1">
-          <table className="min-w-full text-sm">
-            <thead className="sticky top-0 bg-slate-100 z-10">
-              <tr className="text-left">
-                <th className="px-4 py-3">Fecha</th>
-                <th className="px-4 py-3">Tipo</th>
-                <th className="px-4 py-3">Código POS</th>
-                <th className="px-4 py-3">Vendedor</th>
-                <th className="px-4 py-3">Comercio</th>
-                <th className="px-4 py-3">Usuario</th>
-                <th className="px-4 py-3">Rol</th>
-                <th className="px-4 py-3">Nota</th>
-              </tr>
-            </thead>
+        <FormCard
+          title="Historial operativo"
+          description={`${filtered.length} movimientos de ${movements.length} totales`}
+        >
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+            <div className="min-w-0 flex-1">
+              <input
+                type="text"
+                placeholder="Buscar por POS, vendedor, comercio, usuario, rol o nota..."
+                className={fieldClassName}
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </div>
 
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="px-4 py-6 text-center text-slate-500"
-                  >
-                    No hay movimientos para mostrar.
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((m) => (
-                  <tr key={m.id} className="border-t align-top">
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {formatDate(m.created_at)}
-                    </td>
+            <div className="xl:w-[320px]">
+              <select
+                className={fieldClassName}
+                value={typeFilter}
+                onChange={(event) => setTypeFilter(event.target.value)}
+              >
+                <option value="">Todos los movimientos</option>
+                <option value="ingreso_stock">Ingreso a stock</option>
+                <option value="retorno_stock">Retorno a stock</option>
+                <option value="asignado_comercio">
+                  Asignado a comercio
+                </option>
+                <option value="asignado_vendedor">
+                  Asignado a vendedor
+                </option>
+                <option value="mantenimiento">Mantenimiento</option>
+                <option value="baja">Baja</option>
+                <option value="instalacion_completada">
+                  Instalación completada
+                </option>
+              </select>
+            </div>
 
-                    <td className="px-4 py-3 font-medium">
-                      {getTypeLabel(m.type)}
-                    </td>
+            <SecondaryButton
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setTypeFilter("");
+              }}
+              disabled={!search && !typeFilter}
+              className="shrink-0"
+            >
+              Limpiar filtros
+            </SecondaryButton>
 
-                    <td className="px-4 py-3">{m.pos_code || "-"}</td>
+            <PrimaryButton
+              type="button"
+              onClick={handleExportExcel}
+              className="shrink-0"
+            >
+              Exportar Excel
+            </PrimaryButton>
+          </div>
 
-                    <td className="px-4 py-3">{m.vendor_name || "-"}</td>
+          <div className="mt-5">
+            {filtered.length === 0 ? (
+              <EmptyState
+                title="No hay movimientos para mostrar"
+                description={
+                  movements.length === 0
+                    ? "Los movimientos realizados sobre los equipos POS aparecerán en este historial."
+                    : "Probá cambiando el texto de búsqueda o el tipo de movimiento."
+                }
+              />
+            ) : (
+              <div className="max-h-[700px] overflow-auto rounded-xl border border-slate-200">
+                <table className="min-w-[1180px] w-full text-sm">
+                  <thead className="sticky top-0 z-10 bg-slate-100">
+                    <tr className="text-left text-slate-700">
+                      <th className="px-4 py-3 font-semibold">Fecha</th>
+                      <th className="px-4 py-3 font-semibold">Movimiento</th>
+                      <th className="px-4 py-3 font-semibold">POS</th>
+                      <th className="px-4 py-3 font-semibold">Asignación</th>
+                      <th className="px-4 py-3 font-semibold">Usuario</th>
+                      <th className="px-4 py-3 font-semibold">Nota</th>
+                    </tr>
+                  </thead>
 
-                    <td className="px-4 py-3">{m.merchant_name || "-"}</td>
+                  <tbody>
+                    {filtered.map((movement) => (
+                      <tr
+                        key={movement.id}
+                        className="border-t border-slate-200 align-top transition hover:bg-slate-50"
+                      >
+                        <td className="whitespace-nowrap px-4 py-4 text-slate-700">
+                          {formatDate(movement.created_at)}
+                        </td>
 
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col">
-                        <span>{m.user_name || "-"}</span>
-                        {m.user_email && (
-                          <span className="text-xs text-slate-500">
-                            {m.user_email}
-                          </span>
-                        )}
-                      </div>
-                    </td>
+                        <td className="px-4 py-4">
+                          <StatusBadge
+                            label={getTypeLabel(movement.type)}
+                            tone={getMovementTone(movement.type)}
+                          />
+                        </td>
 
-                    <td className="px-4 py-3">{m.user_role || "-"}</td>
+                        <td className="px-4 py-4">
+                          <p className="font-semibold text-slate-900">
+                            {movement.pos_code || "-"}
+                          </p>
+                        </td>
 
-                    <td className="px-4 py-3">{m.notes || "-"}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                        <td className="px-4 py-4">
+                          <div className="space-y-1 text-sm text-slate-700">
+                            <p>
+                              <span className="font-semibold text-slate-500">
+                                Vendedor:
+                              </span>{" "}
+                              {movement.vendor_name || "-"}
+                            </p>
+
+                            <p>
+                              <span className="font-semibold text-slate-500">
+                                Comercio:
+                              </span>{" "}
+                              {movement.merchant_name || "-"}
+                            </p>
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <div className="space-y-1">
+                            <p className="font-medium text-slate-900">
+                              {movement.user_name || "-"}
+                            </p>
+
+                            <p className="text-xs text-slate-500">
+                              Rol: {movement.user_role || "-"}
+                            </p>
+
+                            {movement.user_email ? (
+                              <p className="text-xs text-slate-500">
+                                {movement.user_email}
+                              </p>
+                            ) : null}
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-4 text-slate-700">
+                          <p className="max-w-md whitespace-normal">
+                            {movement.notes || "-"}
+                          </p>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </FormCard>
       </div>
     </main>
   );

@@ -3,6 +3,22 @@
 import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/client";
+import NotificationBanner, {
+  type NotificationMessage,
+} from "@/components/ui/NotificationBanner";
+import ConfirmModal from "@/components/ui/ConfirmModal";
+import {
+  DangerButton,
+  EmptyState,
+  FormCard,
+  PageHeader,
+  PrimaryButton,
+  SearchToolbar,
+  SecondaryButton,
+  StatusBadge,
+  fieldClassName,
+  labelClassName,
+} from "@/components/ui";
 
 type Vendor = {
   id: string;
@@ -66,6 +82,11 @@ export default function PosClient({
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
+  const [message, setMessage] =
+    useState<NotificationMessage | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [posToDelete, setPosToDelete] = useState<PosDevice | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const isVendor = currentRole === "vendedor";
 
@@ -277,27 +298,42 @@ export default function PosClient({
 
   const validateForm = () => {
     if (!formData.code.trim()) {
-      alert("Debés completar el Código interno.");
+      setMessage({
+        type: "warning",
+        text: "Debés completar el Código interno.",
+      });
       return false;
     }
 
     if (!formData.brand.trim()) {
-      alert("Debés completar la Marca.");
+      setMessage({
+        type: "warning",
+        text: "Debés completar la Marca.",
+      });
       return false;
     }
 
     if (!formData.model.trim()) {
-      alert("Debés completar el Modelo.");
+      setMessage({
+        type: "warning",
+        text: "Debés completar el Modelo.",
+      });
       return false;
     }
 
     if (!formData.serial.trim()) {
-      alert("Debés completar el Serial.");
+      setMessage({
+        type: "warning",
+        text: "Debés completar el Serial.",
+      });
       return false;
     }
 
     if (!formData.imei.trim()) {
-      alert("Debés completar el IMEI 1.");
+      setMessage({
+        type: "warning",
+        text: "Debés completar el IMEI 1.",
+      });
       return false;
     }
 
@@ -310,31 +346,43 @@ export default function PosClient({
     const imei = normalize(formData.imei);
     const imei2 = normalize(formData.imei_2);
 
-    for (const p of posDevices) {
-      if (editingId && p.id === editingId) continue;
+    for (const pos of posDevices) {
+      if (editingId && pos.id === editingId) continue;
 
-      const posCode = normalize(p.code);
-      const posSerial = normalize(p.serial);
-      const posImei = normalize(p.imei);
-      const posImei2 = normalize(p.imei_2);
+      const posCode = normalize(pos.code);
+      const posSerial = normalize(pos.serial);
+      const posImei = normalize(pos.imei);
+      const posImei2 = normalize(pos.imei_2);
 
       if (code && posCode === code) {
-        alert("Ya existe un POS con ese Código interno.");
+        setMessage({
+          type: "warning",
+          text: "Ya existe un POS con ese Código interno.",
+        });
         return false;
       }
 
       if (serial && posSerial === serial) {
-        alert("Ya existe un POS con ese Serial.");
+        setMessage({
+          type: "warning",
+          text: "Ya existe un POS con ese Serial.",
+        });
         return false;
       }
 
       if (imei && (posImei === imei || posImei2 === imei)) {
-        alert("Ya existe un POS con ese IMEI 1.");
+        setMessage({
+          type: "warning",
+          text: "Ya existe un POS con ese IMEI 1.",
+        });
         return false;
       }
 
       if (imei2 && (posImei === imei2 || posImei2 === imei2)) {
-        alert("Ya existe un POS con ese IMEI 2.");
+        setMessage({
+          type: "warning",
+          text: "Ya existe un POS con ese IMEI 2.",
+        });
         return false;
       }
     }
@@ -362,6 +410,8 @@ export default function PosClient({
         return "Asignado a vendedor";
       case "assigned_merchant":
         return "Asignado a comercio";
+      case "installed":
+        return "Instalado";
       case "maintenance":
         return "Mantenimiento";
       case "inactive":
@@ -379,6 +429,8 @@ export default function PosClient({
         return "bg-blue-100 text-blue-700";
       case "assigned_merchant":
         return "bg-violet-100 text-violet-700";
+      case "installed":
+        return "bg-teal-100 text-teal-700";
       case "maintenance":
         return "bg-amber-100 text-amber-700";
       case "inactive":
@@ -431,6 +483,7 @@ export default function PosClient({
   };
 
   const handleEdit = (pos: PosDevice) => {
+    setMessage(null);
     setEditingId(pos.id);
     setFormData({
       code: pos.code || "",
@@ -440,82 +493,142 @@ export default function PosClient({
       imei: pos.imei || "",
       imei_2: pos.imei_2 || "",
     });
+
+    window.requestAnimationFrame(() => {
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    });
   };
 
-  const handleDelete = async (id: string) => {
-    const confirmed = window.confirm("¿Seguro que querés eliminar este POS?");
-    if (!confirmed) return;
+  const requestDelete = (pos: PosDevice) => {
+    setMessage(null);
+    setPosToDelete(pos);
+    setDeleteModalOpen(true);
+  };
 
-    const { error } = await supabase.from("pos_devices").delete().eq("id", id);
+  const cancelDelete = () => {
+    if (deleting) return;
 
-    if (error) {
-      alert(`Error al eliminar POS: ${error.message}`);
+    setDeleteModalOpen(false);
+    setPosToDelete(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!posToDelete) return;
+
+    setDeleting(true);
+    setMessage(null);
+
+    try {
+      const { error } = await supabase
+        .from("pos_devices")
+        .delete()
+        .eq("id", posToDelete.id);
+
+      if (error) {
+        throw new Error(`Error al eliminar POS: ${error.message}`);
+      }
+
+      if (editingId === posToDelete.id) {
+        resetForm();
+      }
+
+      await reloadPos();
+
+      setDeleteModalOpen(false);
+      setPosToDelete(null);
+      setMessage({
+        type: "success",
+        text: "POS eliminado correctamente.",
+      });
+    } catch (error) {
       console.error(error);
-      return;
+      setMessage({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "No se pudo eliminar el POS.",
+      });
+    } finally {
+      setDeleting(false);
     }
-
-    if (editingId === id) {
-      resetForm();
-    }
-
-    await reloadPos();
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setMessage(null);
 
     if (!validateForm()) return;
     if (!validateDuplicates()) return;
 
     setLoading(true);
 
-    if (editingId) {
-      const { error } = await supabase
-        .from("pos_devices")
-        .update({
+    try {
+      if (editingId) {
+        const { error } = await supabase
+          .from("pos_devices")
+          .update({
+            code: formData.code.trim(),
+            brand: formData.brand.trim(),
+            model: formData.model.trim(),
+            serial: formData.serial.trim(),
+            imei: formData.imei.trim(),
+            imei_2: formData.imei_2.trim() || null,
+          })
+          .eq("id", editingId);
+
+        if (error) {
+          throw new Error(`Error al editar POS: ${error.message}`);
+        }
+
+        resetForm();
+        await reloadPos();
+
+        setMessage({
+          type: "success",
+          text: "POS actualizado correctamente.",
+        });
+        return;
+      }
+
+      const { error } = await supabase.from("pos_devices").insert([
+        {
           code: formData.code.trim(),
           brand: formData.brand.trim(),
           model: formData.model.trim(),
           serial: formData.serial.trim(),
           imei: formData.imei.trim(),
           imei_2: formData.imei_2.trim() || null,
-        })
-        .eq("id", editingId);
-
-      setLoading(false);
+        },
+      ]);
 
       if (error) {
-        alert(`Error al editar POS: ${error.message}`);
-        console.error(error);
-        return;
+        throw new Error(`Error al guardar POS: ${error.message}`);
       }
 
       resetForm();
       await reloadPos();
-      return;
-    }
 
-    const { error } = await supabase.from("pos_devices").insert([
-      {
-        code: formData.code.trim(),
-        brand: formData.brand.trim(),
-        model: formData.model.trim(),
-        serial: formData.serial.trim(),
-        imei: formData.imei.trim(),
-        imei_2: formData.imei_2.trim() || null,
-      },
-    ]);
-
-    setLoading(false);
-
-    if (error) {
-      alert(`Error al guardar POS: ${error.message}`);
+      setMessage({
+        type: "success",
+        text: "POS guardado correctamente.",
+      });
+    } catch (error) {
       console.error(error);
-      return;
-    }
 
-    resetForm();
-    await reloadPos();
+      setMessage({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "No se pudo guardar el POS.",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filteredPosDevices = useMemo(() => {
@@ -575,12 +688,63 @@ export default function PosClient({
     XLSX.writeFile(workbook, "listado_pos.xlsx");
   };
 
+  const getStatusTone = (
+    status: string | null
+  ):
+    | "neutral"
+    | "info"
+    | "success"
+    | "warning"
+    | "danger"
+    | "violet"
+    | "teal" => {
+    switch (status) {
+      case "in_stock":
+        return "success";
+      case "assigned_vendor":
+        return "info";
+      case "assigned_merchant":
+        return "violet";
+      case "installed":
+        return "teal";
+      case "maintenance":
+        return "warning";
+      case "inactive":
+        return "danger";
+      default:
+        return "neutral";
+    }
+  };
+
+  const getInstallationTone = (
+    status: string | null
+  ): "neutral" | "info" | "success" | "warning" | "danger" => {
+    switch (status) {
+      case "pending":
+        return "warning";
+      case "in_progress":
+        return "info";
+      case "completed":
+        return "success";
+      case "cancelled":
+        return "danger";
+      default:
+        return "neutral";
+    }
+  };
+
   if (pageLoading) {
     return (
       <main className="min-h-screen bg-gray-50 p-6">
-        <h1 className="mb-6 text-3xl font-bold">POS / Terminales</h1>
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-gray-500">Cargando POS...</p>
+        <div className="mx-auto max-w-7xl">
+          <PageHeader
+            title="POS / Terminales"
+            description="Gestioná el inventario técnico y consultá el estado operativo de los equipos."
+          />
+
+          <FormCard>
+            <p className="text-sm text-slate-500">Cargando POS...</p>
+          </FormCard>
         </div>
       </main>
     );
@@ -588,261 +752,344 @@ export default function PosClient({
 
   return (
     <main className="min-h-screen bg-gray-50 p-6">
-      <h1 className="mb-6 text-3xl font-bold">POS / Terminales</h1>
+      <div className="mx-auto max-w-[1800px]">
+        <PageHeader
+          title="POS / Terminales"
+          description="Gestioná el inventario técnico y consultá el estado operativo de los equipos."
+        />
 
-      <div
-        className={`grid gap-6 ${
-          isVendor ? "grid-cols-1" : "md:grid-cols-[420px_1fr]"
-        }`}
-      >
-        {!isVendor && (
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-2 text-xl font-semibold">
-              {editingId ? "Editar POS" : "Nuevo POS"}
-            </h2>
+        <NotificationBanner
+          message={message}
+          onClose={() => setMessage(null)}
+          className="mb-5"
+        />
 
-            <p className="mb-4 text-sm text-slate-500">
-              Este módulo es solo para alta y edición técnica del equipo. Las
-              asignaciones y cambios de estado se realizan únicamente desde el
-              módulo Asignaciones.
-            </p>
+        <div
+          className={`grid gap-6 ${
+            isVendor
+              ? "grid-cols-1"
+              : "xl:grid-cols-[minmax(360px,0.8fr)_minmax(0,2.2fr)]"
+          }`}
+        >
+          {!isVendor ? (
+            <FormCard
+              title={editingId ? "Editar POS" : "Nuevo POS"}
+              description="Este módulo es únicamente para el alta y la edición técnica. Las asignaciones y los cambios de estado se gestionan desde Asignaciones."
+            >
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <div>
+                  <label className={labelClassName}>Código interno</label>
+                  <input
+                    type="text"
+                    required
+                    className={fieldClassName}
+                    value={formData.code}
+                    onChange={(event) =>
+                      handleChange("code", event.target.value)
+                    }
+                    placeholder="Ej: POS-001"
+                    disabled={loading}
+                  />
+                </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="mb-1 block text-sm">Código interno</label>
-                <input
-                  type="text"
-                  required
-                  className="w-full rounded-md border px-3 py-2"
-                  value={formData.code}
-                  onChange={(e) => handleChange("code", e.target.value)}
-                  placeholder="Ej: POS-001"
-                />
-              </div>
+                <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                  <div>
+                    <label className={labelClassName}>Marca</label>
+                    <input
+                      type="text"
+                      required
+                      className={fieldClassName}
+                      value={formData.brand}
+                      onChange={(event) =>
+                        handleChange("brand", event.target.value)
+                      }
+                      placeholder="Ej: UROVO"
+                      disabled={loading}
+                    />
+                  </div>
 
-              <div>
-                <label className="mb-1 block text-sm">Marca</label>
-                <input
-                  type="text"
-                  required
-                  className="w-full rounded-md border px-3 py-2"
-                  value={formData.brand}
-                  onChange={(e) => handleChange("brand", e.target.value)}
-                  placeholder="Ej: UROVO"
-                />
-              </div>
+                  <div>
+                    <label className={labelClassName}>Modelo</label>
+                    <input
+                      type="text"
+                      required
+                      className={fieldClassName}
+                      value={formData.model}
+                      onChange={(event) =>
+                        handleChange("model", event.target.value)
+                      }
+                      placeholder="Ej: i9100"
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
 
-              <div>
-                <label className="mb-1 block text-sm">Modelo</label>
-                <input
-                  type="text"
-                  required
-                  className="w-full rounded-md border px-3 py-2"
-                  value={formData.model}
-                  onChange={(e) => handleChange("model", e.target.value)}
-                  placeholder="Ej: i9100"
-                />
-              </div>
+                <div>
+                  <label className={labelClassName}>Serial</label>
+                  <input
+                    type="text"
+                    required
+                    className={fieldClassName}
+                    value={formData.serial}
+                    onChange={(event) =>
+                      handleChange("serial", event.target.value)
+                    }
+                    placeholder="Ej: SRL123456"
+                    disabled={loading}
+                  />
+                </div>
 
-              <div>
-                <label className="mb-1 block text-sm">Serial</label>
-                <input
-                  type="text"
-                  required
-                  className="w-full rounded-md border px-3 py-2"
-                  value={formData.serial}
-                  onChange={(e) => handleChange("serial", e.target.value)}
-                  placeholder="Ej: SRL123456"
-                />
-              </div>
+                <div>
+                  <label className={labelClassName}>IMEI 1</label>
+                  <input
+                    type="text"
+                    required
+                    className={fieldClassName}
+                    value={formData.imei}
+                    onChange={(event) =>
+                      handleChange("imei", event.target.value)
+                    }
+                    placeholder="Ej: 123456789012345"
+                    disabled={loading}
+                  />
+                </div>
 
-              <div>
-                <label className="mb-1 block text-sm">IMEI 1</label>
-                <input
-                  type="text"
-                  required
-                  className="w-full rounded-md border px-3 py-2"
-                  value={formData.imei}
-                  onChange={(e) => handleChange("imei", e.target.value)}
-                  placeholder="Ej: 123456789012345"
-                />
-              </div>
+                <div>
+                  <label className={labelClassName}>IMEI 2</label>
+                  <input
+                    type="text"
+                    className={fieldClassName}
+                    value={formData.imei_2}
+                    onChange={(event) =>
+                      handleChange("imei_2", event.target.value)
+                    }
+                    placeholder="Opcional"
+                    disabled={loading}
+                  />
+                </div>
 
-              <div>
-                <label className="mb-1 block text-sm">IMEI 2</label>
-                <input
-                  type="text"
-                  className="w-full rounded-md border px-3 py-2"
-                  value={formData.imei_2}
-                  onChange={(e) => handleChange("imei_2", e.target.value)}
-                  placeholder="Ej: 987654321098765"
-                />
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="rounded-md bg-black px-4 py-2 text-white"
-                >
-                  {loading
-                    ? "Guardando..."
-                    : editingId
-                    ? "Actualizar POS"
-                    : "Guardar POS"}
-                </button>
-
-                {editingId && (
-                  <button
-                    type="button"
-                    onClick={resetForm}
-                    className="rounded-md border px-4 py-2"
+                <div className="flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row">
+                  <PrimaryButton
+                    type="submit"
+                    loading={loading}
+                    loadingLabel="Guardando..."
                   >
-                    Cancelar
-                  </button>
-                )}
-              </div>
-            </form>
-          </section>
-        )}
+                    {editingId ? "Actualizar POS" : "Guardar POS"}
+                  </PrimaryButton>
 
-        <section className="flex h-[850px] flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold">
-                {isVendor ? "Mis POS asignados" : "Listado"}
-              </h2>
-              <span className="text-sm text-slate-500">
-                {filteredPosDevices.length} de {posDevices.length} equipos
-              </span>
-            </div>
+                  {editingId ? (
+                    <SecondaryButton
+                      type="button"
+                      onClick={resetForm}
+                      disabled={loading}
+                    >
+                      Cancelar edición
+                    </SecondaryButton>
+                  ) : null}
+                </div>
+              </form>
+            </FormCard>
+          ) : null}
 
-            <button
-              type="button"
-              onClick={handleExportExcel}
-              className="rounded-md bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-700"
-            >
-              Exportar Excel
-            </button>
-          </div>
-
-          <div
-            className={`mb-4 grid gap-3 ${
-              isVendor ? "md:grid-cols-2" : "md:grid-cols-3"
-            }`}
+          <FormCard
+            title={isVendor ? "Mis POS asignados" : "Listado de POS"}
+            description={`${filteredPosDevices.length} de ${posDevices.length} equipos`}
+            className="min-w-0"
           >
-            <input
-              type="text"
-              placeholder="Buscar por código, serial, IMEI, vendedor, comercio, estado o instalación..."
-              className="rounded-md border px-3 py-2 text-sm md:col-span-2"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+              <div className="min-w-0 flex-1">
+                <SearchToolbar
+                  value={search}
+                  onChange={setSearch}
+                  onClear={clearFilters}
+                  placeholder="Buscar por código, serial, IMEI, vendedor, comercio, estado o instalación..."
+                />
+              </div>
 
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50"
-            >
-              Limpiar filtros
-            </button>
-          </div>
-
-          {filteredPosDevices.length === 0 ? (
-            <p className="text-gray-500">
-              {isVendor
-                ? "No tenés POS asignados en este momento."
-                : "No hay POS para mostrar."}
-            </p>
-          ) : (
-            <div className="flex-1 overflow-auto rounded-xl border border-slate-200">
-              <table className="min-w-full text-sm">
-                <thead className="sticky top-0 z-10 bg-slate-100">
-                  <tr className="text-left">
-                    <th className="px-4 py-3">Código</th>
-                    <th className="px-4 py-3">Marca</th>
-                    <th className="px-4 py-3">Modelo</th>
-                    <th className="px-4 py-3">Serial</th>
-                    <th className="px-4 py-3">IMEI 1</th>
-                    <th className="px-4 py-3">IMEI 2</th>
-                    <th className="px-4 py-3">Estado</th>
-                    <th className="px-4 py-3">Instalación</th>
-                    <th className="px-4 py-3">Vendedor</th>
-                    <th className="px-4 py-3">Comercio</th>
-                    {!isVendor && <th className="px-4 py-3">Acciones</th>}
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {filteredPosDevices.map((pos) => {
-                    const latestInstallation = getLatestInstallationForPos(pos.id);
-
-                    return (
-                      <tr key={pos.id} className="border-t align-top">
-                        <td className="px-4 py-3 font-medium">
-                          {pos.code || "-"}
-                        </td>
-                        <td className="px-4 py-3">{pos.brand || "-"}</td>
-                        <td className="px-4 py-3">{pos.model || "-"}</td>
-                        <td className="px-4 py-3">{pos.serial || "-"}</td>
-                        <td className="px-4 py-3">{pos.imei || "-"}</td>
-                        <td className="px-4 py-3">{pos.imei_2 || "-"}</td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(
-                              pos.status
-                            )}`}
-                          >
-                            {getStatusLabel(pos.status)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getInstallationStatusClass(
-                              latestInstallation?.status || null
-                            )}`}
-                          >
-                            {getInstallationStatusLabel(
-                              latestInstallation?.status || null
-                            )}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          {getVendorName(pos.vendor_id)}
-                        </td>
-                        <td className="px-4 py-3">
-                          {getMerchantName(pos.merchant_id)}
-                        </td>
-                        {!isVendor && (
-                          <td className="px-4 py-3">
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                onClick={() => handleEdit(pos)}
-                                className="rounded-md bg-blue-600 px-3 py-1 text-xs text-white"
-                              >
-                                Editar
-                              </button>
-
-                              {canDeletePos && (
-                                <button
-                                  onClick={() => handleDelete(pos.id)}
-                                  className="rounded-md bg-red-600 px-3 py-1 text-xs text-white"
-                                >
-                                  Eliminar
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <PrimaryButton
+                type="button"
+                onClick={handleExportExcel}
+                className="shrink-0"
+              >
+                Exportar Excel
+              </PrimaryButton>
             </div>
-          )}
-        </section>
+
+            <div className="mt-5">
+              {filteredPosDevices.length === 0 ? (
+                <EmptyState
+                  title={
+                    isVendor
+                      ? "No tenés POS asignados"
+                      : "No hay POS para mostrar"
+                  }
+                  description={
+                    isVendor
+                      ? "Cuando te asignen equipos, aparecerán en este listado."
+                      : "Los equipos que registres aparecerán en este listado."
+                  }
+                />
+              ) : (
+                <div className="max-h-[760px] overflow-auto rounded-xl border border-slate-200">
+                  <table className="min-w-[1120px] w-full text-sm">
+                    <thead className="sticky top-0 z-10 bg-slate-100">
+                      <tr className="text-left text-slate-700">
+                        <th className="px-4 py-3 font-semibold">Código</th>
+                        <th className="px-4 py-3 font-semibold">Equipo</th>
+                        <th className="px-4 py-3 font-semibold">Identificadores</th>
+                        <th className="px-4 py-3 font-semibold">Estado</th>
+                        <th className="px-4 py-3 font-semibold">Asignación</th>
+                        {!isVendor ? (
+                          <th className="px-4 py-3 font-semibold">Acciones</th>
+                        ) : null}
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {filteredPosDevices.map((pos) => {
+                        const latestInstallation =
+                          getLatestInstallationForPos(pos.id);
+
+                        return (
+                          <tr
+                            key={pos.id}
+                            className="border-t border-slate-200 align-top transition hover:bg-slate-50"
+                          >
+                            <td className="px-4 py-4">
+                              <p className="font-semibold text-slate-900">
+                                {pos.code || "-"}
+                              </p>
+                            </td>
+
+                            <td className="px-4 py-4">
+                              <p className="font-medium text-slate-900">
+                                {[pos.brand, pos.model]
+                                  .filter(Boolean)
+                                  .join(" ") || "-"}
+                              </p>
+                            </td>
+
+                            <td className="px-4 py-4">
+                              <div className="space-y-3 text-xs">
+                                <div className="grid grid-cols-[56px_1fr] gap-2">
+                                  <span className="font-semibold text-slate-500">
+                                    Serial
+                                  </span>
+
+                                  <span className="font-mono text-slate-800">
+                                    {pos.serial || "-"}
+                                  </span>
+                                </div>
+
+                                <div className="grid grid-cols-[56px_1fr] gap-2">
+                                  <span className="font-semibold text-slate-500">
+                                    IMEI 1
+                                  </span>
+
+                                  <span className="font-mono text-slate-800">
+                                    {pos.imei || "-"}
+                                  </span>
+                                </div>
+
+                                <div className="grid grid-cols-[56px_1fr] gap-2">
+                                  <span className="font-semibold text-slate-500">
+                                    IMEI 2
+                                  </span>
+
+                                  <span className="font-mono text-slate-800">
+                                    {pos.imei_2 || "-"}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="px-4 py-4">
+                              <div className="flex flex-col items-start gap-2">
+                                <StatusBadge
+                                  label={getStatusLabel(pos.status)}
+                                  tone={getStatusTone(pos.status)}
+                                />
+
+                                <StatusBadge
+                                  label={getInstallationStatusLabel(
+                                    latestInstallation?.status || null
+                                  )}
+                                  tone={getInstallationTone(
+                                    latestInstallation?.status || null
+                                  )}
+                                />
+                              </div>
+                            </td>
+
+                            <td className="px-4 py-4">
+                              <div className="space-y-1 text-sm text-slate-700">
+                                <p>
+                                  <span className="font-semibold text-slate-500">
+                                    Vendedor:
+                                  </span>{" "}
+                                  {getVendorName(pos.vendor_id)}
+                                </p>
+
+                                <p>
+                                  <span className="font-semibold text-slate-500">
+                                    Comercio:
+                                  </span>{" "}
+                                  {getMerchantName(pos.merchant_id)}
+                                </p>
+                              </div>
+                            </td>
+
+                            {!isVendor ? (
+                              <td className="px-4 py-4">
+                                <div className="flex flex-wrap gap-2">
+                                  <SecondaryButton
+                                    type="button"
+                                    onClick={() => handleEdit(pos)}
+                                    className="px-3 py-2 text-xs"
+                                  >
+                                    Editar
+                                  </SecondaryButton>
+
+                                  {canDeletePos ? (
+                                    <DangerButton
+                                      type="button"
+                                      onClick={() => requestDelete(pos)}
+                                      className="px-3 py-2 text-xs"
+                                    >
+                                      Eliminar
+                                    </DangerButton>
+                                  ) : null}
+                                </div>
+                              </td>
+                            ) : null}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </FormCard>
+        </div>
       </div>
+
+      <ConfirmModal
+        open={deleteModalOpen}
+        title="Eliminar POS"
+        description={
+          posToDelete
+            ? `¿Confirmás eliminar el POS ${
+                posToDelete.code || "sin código"
+              }? Esta acción no se puede deshacer.`
+            : "¿Confirmás eliminar este POS?"
+        }
+        confirmLabel="Eliminar"
+        cancelLabel="Cancelar"
+        loading={deleting}
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+      />
     </main>
   );
 }
