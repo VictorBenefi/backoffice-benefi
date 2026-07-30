@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
   const supabase = createClient();
@@ -10,6 +11,7 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,13 +87,32 @@ export default function LoginPage() {
           onChange={(e) => setEmail(e.target.value)}
         />
 
+        <div className="relative">
         <input
-          type="password"
+          type={showPassword ? "text" : "password"}
           placeholder="Contraseña"
-          className="w-full rounded-md border px-3 py-2"
+          className="w-full rounded-md border px-3 py-2 pr-11"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
+
+        <button
+          type="button"
+          onClick={() => setShowPassword(!showPassword)}
+          className="absolute inset-y-0 right-3 flex items-center text-gray-500 hover:text-gray-700"
+          aria-label={
+            showPassword
+              ? "Ocultar contraseña"
+              : "Mostrar contraseña"
+          }
+        >
+          {showPassword ? (
+            <EyeOff size={18} />
+          ) : (
+            <Eye size={18} />
+          )}
+        </button>
+      </div>
 
         <button
           type="submit"
