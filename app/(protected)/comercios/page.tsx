@@ -1042,11 +1042,11 @@ const refreshMerchantDocumentation = async (
   return (
     <main className="min-h-screen bg-slate-50 p-4 md:p-6">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-slate-950">
+        <h1 className="text-2xl font-bold text-slate-950 md:text-3xl">
           Comercios
         </h1>
 
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm leading-6 text-slate-500 md:leading-normal">
           Alta, asignación comercial y gestión del legajo de cada comercio.
         </p>
       </div>
@@ -1068,10 +1068,10 @@ const refreshMerchantDocumentation = async (
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(380px,0.8fr)]">
         {/* FORMULARIO */}
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 px-5 py-5 md:px-7">
+          <div className="border-b border-slate-200 px-4 py-4 md:px-7 md:py-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="text-xl font-semibold text-slate-950">
+                <h2 className="text-lg font-semibold md:text-xl">
                   {editingId
                     ? `Ficha del comercio: ${formData.name || "Sin nombre"}`
                     : "Nuevo comercio"}
@@ -1224,7 +1224,7 @@ const refreshMerchantDocumentation = async (
                       onClick={() =>
                         toggleService(service.value)
                       }
-                      className={`rounded-xl border p-4 text-left transition ${
+                      className={`rounded-xl border p-3 md:p-4 text-left transition ${
                         selected
                           ? "border-slate-950 bg-slate-950 text-white"
                           : "border-slate-200 bg-white text-slate-900 hover:border-slate-400"
@@ -1409,12 +1409,12 @@ const refreshMerchantDocumentation = async (
               )}
             </FormSection>
 
-            <div className="sticky bottom-0 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur md:px-7">
-              <div className="flex flex-wrap gap-3">
+            <div className="sticky bottom-0 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur md:px-7 md:py-4">
+              <div className="flex flex-col gap-3 sm:flex-row">
                 <button
                   type="submit"
                   disabled={loading}
-                  className="rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="w-full rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                 >
                   {loading
                     ? "Guardando..."
@@ -1428,7 +1428,7 @@ const refreshMerchantDocumentation = async (
                     type="button"
                     onClick={resetForm}
                     disabled={loading}
-                    className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    className="w-full rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:w-auto"
                   >
                     Nuevo comercio
                   </button>
@@ -1443,7 +1443,7 @@ const refreshMerchantDocumentation = async (
           <div className="border-b border-slate-200 p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-xl font-semibold text-slate-950">
+                <h2 className="text-lg font-semibold md:text-xl"> 
                   Comercios registrados
                 </h2>
 
@@ -1663,7 +1663,7 @@ const refreshMerchantDocumentation = async (
 }
 
 const inputClass =
-  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10";
+  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10 md:py-2.5";
 
 function FormSection({
   number,
@@ -1680,21 +1680,21 @@ function FormSection({
 }) {
   return (
     <section
-      className={`px-5 py-6 md:px-7 ${
+        className={`px-4 py-5 md:px-7 md:py-6 ${
         !last ? "border-b border-slate-200" : ""
       }`}
     >
-      <div className="mb-5 flex items-start gap-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-950 text-sm font-semibold text-white">
+      <div className="mb-4 flex items-start gap-3">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-950 text-xs font-semibold text-white md:h-8 md:w-8 md:text-sm">
           {number}
         </div>
 
         <div>
-          <h3 className="font-semibold text-slate-950">
+          <h3 className="text-base font-semibold text-slate-950 md:text-lg">
             {title}
           </h3>
 
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-xs leading-5 text-slate-500 md:text-sm">
             {description}
           </p>
         </div>
@@ -1746,7 +1746,7 @@ function EntityOption({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-xl border p-4 text-left transition ${
+      className={`rounded-xl border p-3 md:p-4 text-left transition ${
         selected
           ? "border-slate-950 bg-slate-950 text-white"
           : "border-slate-200 bg-white hover:border-slate-400"
