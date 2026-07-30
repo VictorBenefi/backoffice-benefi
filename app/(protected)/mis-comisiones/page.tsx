@@ -912,14 +912,14 @@ function PlaceholderValue({
   label: string;
 }) {
   return (
-    <div className="rounded-xl bg-white/80 p-3">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-violet-400">
+    <div className="flex h-full min-h-[88px] flex-col justify-center rounded-xl bg-white/80 p-3">
+      <p className="text-center text-[11px] font-medium uppercase tracking-wide text-violet-400">
         {label}
       </p>
 
-      <p className="mt-1 text-sm font-semibold text-violet-900">
+      <p className="mt-2 text-center text-sm font-semibold text-violet-900">
         Pendiente de API
       </p>
-    </div>
+            </div>
   );
 }
