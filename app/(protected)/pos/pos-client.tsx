@@ -735,7 +735,7 @@ export default function PosClient({
 
   if (pageLoading) {
     return (
-      <main className="min-h-screen bg-gray-50 p-6">
+      <main className="min-h-screen bg-gray-50 p-3 sm:p-4 lg:p-6">
         <div className="mx-auto max-w-7xl">
           <PageHeader
             title="POS / Terminales"
@@ -930,144 +930,229 @@ export default function PosClient({
                   }
                 />
               ) : (
-                <div className="max-h-[760px] overflow-auto rounded-xl border border-slate-200">
-                  <table className="min-w-[1120px] w-full text-sm">
-                    <thead className="sticky top-0 z-10 bg-slate-100">
-                      <tr className="text-left text-slate-700">
-                        <th className="px-4 py-3 font-semibold">Código</th>
-                        <th className="px-4 py-3 font-semibold">Equipo</th>
-                        <th className="px-4 py-3 font-semibold">Identificadores</th>
-                        <th className="px-4 py-3 font-semibold">Estado</th>
-                        <th className="px-4 py-3 font-semibold">Asignación</th>
-                        {!isVendor ? (
-                          <th className="px-4 py-3 font-semibold">Acciones</th>
-                        ) : null}
-                      </tr>
-                    </thead>
+                <>
+                  <div className="space-y-3 lg:hidden">
+                    {filteredPosDevices.map((pos) => {
+                      const latestInstallation =
+                        getLatestInstallationForPos(pos.id);
 
-                    <tbody>
-                      {filteredPosDevices.map((pos) => {
-                        const latestInstallation =
-                          getLatestInstallationForPos(pos.id);
-
-                        return (
-                          <tr
-                            key={pos.id}
-                            className="border-t border-slate-200 align-top transition hover:bg-slate-50"
-                          >
-                            <td className="px-4 py-4">
-                              <p className="font-semibold text-slate-900">
+                      return (
+                        <article
+                          key={pos.id}
+                          className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-base font-bold text-slate-900">
                                 {pos.code || "-"}
                               </p>
-                            </td>
-
-                            <td className="px-4 py-4">
-                              <p className="font-medium text-slate-900">
+                              <p className="mt-1 text-sm text-slate-600">
                                 {[pos.brand, pos.model]
                                   .filter(Boolean)
                                   .join(" ") || "-"}
                               </p>
-                            </td>
+                            </div>
 
-                            <td className="px-4 py-4">
-                              <div className="space-y-3 text-xs">
-                                <div className="grid grid-cols-[56px_1fr] gap-2">
-                                  <span className="font-semibold text-slate-500">
-                                    Serial
-                                  </span>
+                            <StatusBadge
+                              label={getStatusLabel(pos.status)}
+                              tone={getStatusTone(pos.status)}
+                            />
+                          </div>
 
-                                  <span className="font-mono text-slate-800">
-                                    {pos.serial || "-"}
-                                  </span>
-                                </div>
+                          <div className="mt-4 space-y-2 rounded-lg bg-slate-50 p-3 text-xs">
+                            <div className="grid grid-cols-[58px_1fr] gap-2">
+                              <span className="font-semibold text-slate-500">
+                                Serial
+                              </span>
+                              <span className="break-all font-mono text-slate-800">
+                                {pos.serial || "-"}
+                              </span>
+                            </div>
 
-                                <div className="grid grid-cols-[56px_1fr] gap-2">
-                                  <span className="font-semibold text-slate-500">
-                                    IMEI 1
-                                  </span>
+                            <div className="grid grid-cols-[58px_1fr] gap-2">
+                              <span className="font-semibold text-slate-500">
+                                IMEI 1
+                              </span>
+                              <span className="break-all font-mono text-slate-800">
+                                {pos.imei || "-"}
+                              </span>
+                            </div>
 
-                                  <span className="font-mono text-slate-800">
-                                    {pos.imei || "-"}
-                                  </span>
-                                </div>
+                            <div className="grid grid-cols-[58px_1fr] gap-2">
+                              <span className="font-semibold text-slate-500">
+                                IMEI 2
+                              </span>
+                              <span className="break-all font-mono text-slate-800">
+                                {pos.imei_2 || "-"}
+                              </span>
+                            </div>
+                          </div>
 
-                                <div className="grid grid-cols-[56px_1fr] gap-2">
-                                  <span className="font-semibold text-slate-500">
-                                    IMEI 2
-                                  </span>
+                          <div className="mt-4 grid gap-2 text-xs text-slate-700">
+                            <p>
+                              <span className="font-semibold text-slate-500">
+                                Instalación:
+                              </span>{" "}
+                              {getInstallationStatusLabel(
+                                latestInstallation?.status || null
+                              )}
+                            </p>
 
-                                  <span className="font-mono text-slate-800">
-                                    {pos.imei_2 || "-"}
-                                  </span>
-                                </div>
-                              </div>
-                            </td>
+                            <p>
+                              <span className="font-semibold text-slate-500">
+                                Vendedor:
+                              </span>{" "}
+                              {getVendorName(pos.vendor_id)}
+                            </p>
 
-                            <td className="px-4 py-4">
-                              <div className="flex flex-col items-start gap-2">
-                                <StatusBadge
-                                  label={getStatusLabel(pos.status)}
-                                  tone={getStatusTone(pos.status)}
-                                />
+                            <p>
+                              <span className="font-semibold text-slate-500">
+                                Comercio:
+                              </span>{" "}
+                              {getMerchantName(pos.merchant_id)}
+                            </p>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
 
-                                <StatusBadge
-                                  label={getInstallationStatusLabel(
-                                    latestInstallation?.status || null
-                                  )}
-                                  tone={getInstallationTone(
-                                    latestInstallation?.status || null
-                                  )}
-                                />
-                              </div>
-                            </td>
+                  <div className="hidden max-h-[760px] overflow-auto rounded-xl border border-slate-200 lg:block">
+                    <table className="min-w-[1120px] w-full text-sm">
+                      <thead className="sticky top-0 z-10 bg-slate-100">
+                        <tr className="text-left text-slate-700">
+                          <th className="px-4 py-3 font-semibold">Código</th>
+                          <th className="px-4 py-3 font-semibold">Equipo</th>
+                          <th className="px-4 py-3 font-semibold">Identificadores</th>
+                          <th className="px-4 py-3 font-semibold">Estado</th>
+                          <th className="px-4 py-3 font-semibold">Asignación</th>
+                          {!isVendor ? (
+                            <th className="px-4 py-3 font-semibold">Acciones</th>
+                          ) : null}
+                        </tr>
+                      </thead>
 
-                            <td className="px-4 py-4">
-                              <div className="space-y-1 text-sm text-slate-700">
-                                <p>
-                                  <span className="font-semibold text-slate-500">
-                                    Vendedor:
-                                  </span>{" "}
-                                  {getVendorName(pos.vendor_id)}
-                                </p>
+                      <tbody>
+                        {filteredPosDevices.map((pos) => {
+                          const latestInstallation =
+                            getLatestInstallationForPos(pos.id);
 
-                                <p>
-                                  <span className="font-semibold text-slate-500">
-                                    Comercio:
-                                  </span>{" "}
-                                  {getMerchantName(pos.merchant_id)}
-                                </p>
-                              </div>
-                            </td>
-
-                            {!isVendor ? (
+                          return (
+                            <tr
+                              key={pos.id}
+                              className="border-t border-slate-200 align-top transition hover:bg-slate-50"
+                            >
                               <td className="px-4 py-4">
-                                <div className="flex flex-wrap gap-2">
-                                  <SecondaryButton
-                                    type="button"
-                                    onClick={() => handleEdit(pos)}
-                                    className="px-3 py-2 text-xs"
-                                  >
-                                    Editar
-                                  </SecondaryButton>
+                                <p className="font-semibold text-slate-900">
+                                  {pos.code || "-"}
+                                </p>
+                              </td>
 
-                                  {canDeletePos ? (
-                                    <DangerButton
-                                      type="button"
-                                      onClick={() => requestDelete(pos)}
-                                      className="px-3 py-2 text-xs"
-                                    >
-                                      Eliminar
-                                    </DangerButton>
-                                  ) : null}
+                              <td className="px-4 py-4">
+                                <p className="font-medium text-slate-900">
+                                  {[pos.brand, pos.model]
+                                    .filter(Boolean)
+                                    .join(" ") || "-"}
+                                </p>
+                              </td>
+
+                              <td className="px-4 py-4">
+                                <div className="space-y-3 text-xs">
+                                  <div className="grid grid-cols-[56px_1fr] gap-2">
+                                    <span className="font-semibold text-slate-500">
+                                      Serial
+                                    </span>
+                                    <span className="font-mono text-slate-800">
+                                      {pos.serial || "-"}
+                                    </span>
+                                  </div>
+
+                                  <div className="grid grid-cols-[56px_1fr] gap-2">
+                                    <span className="font-semibold text-slate-500">
+                                      IMEI 1
+                                    </span>
+                                    <span className="font-mono text-slate-800">
+                                      {pos.imei || "-"}
+                                    </span>
+                                  </div>
+
+                                  <div className="grid grid-cols-[56px_1fr] gap-2">
+                                    <span className="font-semibold text-slate-500">
+                                      IMEI 2
+                                    </span>
+                                    <span className="font-mono text-slate-800">
+                                      {pos.imei_2 || "-"}
+                                    </span>
+                                  </div>
                                 </div>
                               </td>
-                            ) : null}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+
+                              <td className="px-4 py-4">
+                                <div className="flex flex-col items-start gap-2">
+                                  <StatusBadge
+                                    label={getStatusLabel(pos.status)}
+                                    tone={getStatusTone(pos.status)}
+                                  />
+
+                                  <StatusBadge
+                                    label={getInstallationStatusLabel(
+                                      latestInstallation?.status || null
+                                    )}
+                                    tone={getInstallationTone(
+                                      latestInstallation?.status || null
+                                    )}
+                                  />
+                                </div>
+                              </td>
+
+                              <td className="px-4 py-4">
+                                <div className="space-y-1 text-sm text-slate-700">
+                                  <p>
+                                    <span className="font-semibold text-slate-500">
+                                      Vendedor:
+                                    </span>{" "}
+                                    {getVendorName(pos.vendor_id)}
+                                  </p>
+
+                                  <p>
+                                    <span className="font-semibold text-slate-500">
+                                      Comercio:
+                                    </span>{" "}
+                                    {getMerchantName(pos.merchant_id)}
+                                  </p>
+                                </div>
+                              </td>
+
+                              {!isVendor ? (
+                                <td className="px-4 py-4">
+                                  <div className="flex flex-wrap gap-2">
+                                    <SecondaryButton
+                                      type="button"
+                                      onClick={() => handleEdit(pos)}
+                                      className="px-3 py-2 text-xs"
+                                    >
+                                      Editar
+                                    </SecondaryButton>
+
+                                    {canDeletePos ? (
+                                      <DangerButton
+                                        type="button"
+                                        onClick={() => requestDelete(pos)}
+                                        className="px-3 py-2 text-xs"
+                                      >
+                                        Eliminar
+                                      </DangerButton>
+                                    ) : null}
+                                  </div>
+                                </td>
+                              ) : null}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
           </FormCard>

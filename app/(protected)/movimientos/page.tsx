@@ -196,7 +196,7 @@ export default function MovimientosPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-50 p-6">
+    <main className="min-h-screen bg-gray-50 p-3 sm:p-4 lg:p-6">
       <div className="mx-auto max-w-[1800px]">
         <PageHeader
           title="Movimientos de POS"
@@ -317,88 +317,156 @@ export default function MovimientosPage() {
                 }
               />
             ) : (
-              <div className="max-h-[700px] overflow-auto rounded-xl border border-slate-200">
-                <table className="min-w-[1180px] w-full text-sm">
-                  <thead className="sticky top-0 z-10 bg-slate-100">
-                    <tr className="text-left text-slate-700">
-                      <th className="px-4 py-3 font-semibold">Fecha</th>
-                      <th className="px-4 py-3 font-semibold">Movimiento</th>
-                      <th className="px-4 py-3 font-semibold">POS</th>
-                      <th className="px-4 py-3 font-semibold">Asignación</th>
-                      <th className="px-4 py-3 font-semibold">Usuario</th>
-                      <th className="px-4 py-3 font-semibold">Nota</th>
-                    </tr>
-                  </thead>
+              <>
+                <div className="space-y-3 lg:hidden">
+                  {filtered.map((movement) => (
+                    <article
+                      key={movement.id}
+                      className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                    >
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="text-xs font-medium text-slate-500">
+                            {formatDate(movement.created_at)}
+                          </p>
 
-                  <tbody>
-                    {filtered.map((movement) => (
-                      <tr
-                        key={movement.id}
-                        className="border-t border-slate-200 align-top transition hover:bg-slate-50"
-                      >
-                        <td className="whitespace-nowrap px-4 py-4 text-slate-700">
-                          {formatDate(movement.created_at)}
-                        </td>
-
-                        <td className="px-4 py-4">
                           <StatusBadge
                             label={getTypeLabel(movement.type)}
                             tone={getMovementTone(movement.type)}
                           />
-                        </td>
+                        </div>
 
-                        <td className="px-4 py-4">
-                          <p className="font-semibold text-slate-900">
-                            {movement.pos_code || "-"}
+                        <p className="text-base font-bold text-slate-900">
+                          {movement.pos_code || "-"}
+                        </p>
+                      </div>
+
+                      <div className="mt-3 space-y-1 text-xs text-slate-700">
+                        <p>
+                          <span className="font-semibold text-slate-500">
+                            Vendedor:
+                          </span>{" "}
+                          {movement.vendor_name || "-"}
+                        </p>
+
+                        <p>
+                          <span className="font-semibold text-slate-500">
+                            Comercio:
+                          </span>{" "}
+                          {movement.merchant_name || "-"}
+                        </p>
+
+                        <p>
+                          <span className="font-semibold text-slate-500">
+                            Usuario:
+                          </span>{" "}
+                          {movement.user_name || "-"}
+                        </p>
+
+                        <p>
+                          <span className="font-semibold text-slate-500">
+                            Rol:
+                          </span>{" "}
+                          {movement.user_role || "-"}
+                        </p>
+
+                        {movement.user_email ? (
+                          <p className="break-all text-slate-500">
+                            {movement.user_email}
                           </p>
-                        </td>
+                        ) : null}
+                      </div>
 
-                        <td className="px-4 py-4">
-                          <div className="space-y-1 text-sm text-slate-700">
-                            <p>
-                              <span className="font-semibold text-slate-500">
-                                Vendedor:
-                              </span>{" "}
-                              {movement.vendor_name || "-"}
-                            </p>
+                      <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
+                        {movement.notes || "-"}
+                      </div>
+                    </article>
+                  ))}
+                </div>
 
-                            <p>
-                              <span className="font-semibold text-slate-500">
-                                Comercio:
-                              </span>{" "}
-                              {movement.merchant_name || "-"}
-                            </p>
-                          </div>
-                        </td>
-
-                        <td className="px-4 py-4">
-                          <div className="space-y-1">
-                            <p className="font-medium text-slate-900">
-                              {movement.user_name || "-"}
-                            </p>
-
-                            <p className="text-xs text-slate-500">
-                              Rol: {movement.user_role || "-"}
-                            </p>
-
-                            {movement.user_email ? (
-                              <p className="text-xs text-slate-500">
-                                {movement.user_email}
-                              </p>
-                            ) : null}
-                          </div>
-                        </td>
-
-                        <td className="px-4 py-4 text-slate-700">
-                          <p className="max-w-md whitespace-normal">
-                            {movement.notes || "-"}
-                          </p>
-                        </td>
+                <div className="hidden max-h-[700px] overflow-auto rounded-xl border border-slate-200 lg:block">
+                  <table className="min-w-[1180px] w-full text-sm">
+                    <thead className="sticky top-0 z-10 bg-slate-100">
+                      <tr className="text-left text-slate-700">
+                        <th className="px-4 py-3 font-semibold">Fecha</th>
+                        <th className="px-4 py-3 font-semibold">Movimiento</th>
+                        <th className="px-4 py-3 font-semibold">POS</th>
+                        <th className="px-4 py-3 font-semibold">Asignación</th>
+                        <th className="px-4 py-3 font-semibold">Usuario</th>
+                        <th className="px-4 py-3 font-semibold">Nota</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+
+                    <tbody>
+                      {filtered.map((movement) => (
+                        <tr
+                          key={movement.id}
+                          className="border-t border-slate-200 align-top transition hover:bg-slate-50"
+                        >
+                          <td className="whitespace-nowrap px-4 py-4 text-slate-700">
+                            {formatDate(movement.created_at)}
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <StatusBadge
+                              label={getTypeLabel(movement.type)}
+                              tone={getMovementTone(movement.type)}
+                            />
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <p className="font-semibold text-slate-900">
+                              {movement.pos_code || "-"}
+                            </p>
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <div className="space-y-1 text-sm text-slate-700">
+                              <p>
+                                <span className="font-semibold text-slate-500">
+                                  Vendedor:
+                                </span>{" "}
+                                {movement.vendor_name || "-"}
+                              </p>
+
+                              <p>
+                                <span className="font-semibold text-slate-500">
+                                  Comercio:
+                                </span>{" "}
+                                {movement.merchant_name || "-"}
+                              </p>
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <div className="space-y-1">
+                              <p className="font-medium text-slate-900">
+                                {movement.user_name || "-"}
+                              </p>
+
+                              <p className="text-xs text-slate-500">
+                                Rol: {movement.user_role || "-"}
+                              </p>
+
+                              {movement.user_email ? (
+                                <p className="text-xs text-slate-500">
+                                  {movement.user_email}
+                                </p>
+                              ) : null}
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-4 text-slate-700">
+                            <p className="max-w-md whitespace-normal">
+                              {movement.notes || "-"}
+                            </p>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         </FormCard>
