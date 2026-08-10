@@ -130,7 +130,7 @@ export default function ResponsiveProtectedShell({
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 min-w-[280px] bg-[#050816] text-white lg:block">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 min-w-[280px] bg-[#1E3A5F] text-white lg:block">
         {sidebarContent}
       </aside>
 
@@ -143,7 +143,7 @@ export default function ResponsiveProtectedShell({
             onClick={() => setMobileMenuOpen(false)}
           />
 
-          <aside className="relative h-dvh w-[min(84vw,320px)] overflow-hidden bg-[#050816] text-white shadow-2xl">
+          <aside className="relative h-dvh w-[min(84vw,320px)] overflow-hidden bg-[#1E3A5F] text-white shadow-2xl">
             {sidebarContent}
           </aside>
         </div>
