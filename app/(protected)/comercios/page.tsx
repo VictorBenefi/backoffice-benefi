@@ -58,6 +58,8 @@ type Merchant = {
   bank_alias: string | null;
 
   contracted_services: string[] | null;
+  assumes_installment_financial_cost: boolean | null;
+debit_settlement_days: number | null;
 
   documentation_status: string | null;
   onboarding_status: string | null;
@@ -117,6 +119,8 @@ type FormData = {
   bank_alias: string;
 
   contracted_services: string[];
+  assumes_installment_financial_cost: string;
+debit_settlement_days: string;
 
   vendor_id: string;
 };
@@ -152,6 +156,8 @@ const emptyForm: FormData = {
   bank_alias: "",
 
   contracted_services: [],
+  assumes_installment_financial_cost: "",
+debit_settlement_days: "",
 
   vendor_id: "",
 };
@@ -277,9 +283,26 @@ export default function ComerciosPage() {
   const [savedMerchantId, setSavedMerchantId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
+  const [showInstallmentPlansModal, setShowInstallmentPlansModal] =
+  useState(false);
 
   const isVendorUser = currentRole === "vendedor";
   const canSelectVendor = managementRoles.includes(currentRole);
+
+  const [activeInstallmentSettingId, setActiveInstallmentSettingId] =
+  useState<string | null>(null);
+
+  const [activeInstallmentPeriod, setActiveInstallmentPeriod] =
+    useState("");
+
+  const [activeInstallmentRates, setActiveInstallmentRates] =
+    useState<
+      {
+        installments: number;
+        financial_cost_rate: number;
+        is_enabled: boolean;
+      }[]
+    >([]);
 
   const getInitialForm = (vendor?: Vendor | null): FormData => ({
     ...emptyForm,
@@ -427,6 +450,73 @@ export default function ComerciosPage() {
 
     return files;
   };
+
+  const loadActiveInstallmentPlans = async () => {
+  const { data: setting, error: settingError } =
+    await supabase
+      .from("installment_plan_settings")
+      .select("id, provider, year, month")
+      .eq("provider", "PRISMA")
+      .eq("is_active", true)
+      .maybeSingle();
+
+  if (settingError) {
+    throw new Error(
+      `Error al cargar la configuración de cuotas: ${settingError.message}`
+    );
+  }
+
+  if (!setting) {
+    setActiveInstallmentSettingId(null);
+    setActiveInstallmentPeriod("");
+    setActiveInstallmentRates([]);
+    return;
+  }
+
+  const { data: rates, error: ratesError } =
+    await supabase
+      .from("installment_plan_rates")
+      .select(
+        "installments, financial_cost_rate, is_enabled"
+      )
+      .eq("setting_id", setting.id)
+      .eq("is_enabled", true)
+      .order("installments", {
+        ascending: true,
+      });
+
+  if (ratesError) {
+    throw new Error(
+      `Error al cargar los porcentajes de cuotas: ${ratesError.message}`
+    );
+  }
+
+  const monthName = new Intl.DateTimeFormat(
+    "es-AR",
+    { month: "long" }
+  ).format(
+    new Date(setting.year, setting.month - 1, 1)
+  );
+
+  setActiveInstallmentSettingId(setting.id);
+
+  setActiveInstallmentPeriod(
+    `${setting.provider} · ${
+      monthName.charAt(0).toUpperCase() +
+      monthName.slice(1)
+    } ${setting.year}`
+  );
+
+  setActiveInstallmentRates(
+    (rates || []).map((rate) => ({
+      installments: Number(rate.installments),
+      financial_cost_rate: Number(
+        rate.financial_cost_rate
+      ),
+      is_enabled: Boolean(rate.is_enabled),
+    }))
+  );
+};
 
   const syncMerchantDocumentationStatus = async (
   merchantId: string
@@ -608,6 +698,7 @@ const refreshMerchantDocumentation = async (
         loadMerchants(),
         loadRequirements(),
         loadCurrentMerchantFiles(),
+        loadActiveInstallmentPlans(),
       ]);
     } catch (error) {
       const errorMessage =
@@ -835,8 +926,18 @@ const refreshMerchantDocumentation = async (
 
       contracted_services: formData.contracted_services,
 
+      assumes_installment_financial_cost:
+        formData.assumes_installment_financial_cost === ""
+          ? null
+          : formData.assumes_installment_financial_cost === "yes",
+
+      debit_settlement_days:
+        formData.debit_settlement_days === ""
+          ? null
+          : Number(formData.debit_settlement_days),
+
       vendor_id: effectiveVendorId,
-    };
+          };
 
     try {
       if (editingId) {
@@ -953,7 +1054,21 @@ const refreshMerchantDocumentation = async (
       bank_cbu: merchant.bank_cbu || "",
       bank_alias: merchant.bank_alias || "",
 
-      contracted_services: merchant.contracted_services || [],
+      contracted_services:
+        merchant.contracted_services || [],
+
+      assumes_installment_financial_cost:
+        merchant.assumes_installment_financial_cost === null ||
+        merchant.assumes_installment_financial_cost === undefined
+          ? ""
+          : merchant.assumes_installment_financial_cost
+            ? "yes"
+            : "no",
+
+      debit_settlement_days:
+        merchant.debit_settlement_days
+          ? String(merchant.debit_settlement_days)
+          : "",
 
       vendor_id: isVendorUser
         ? currentVendor?.id || ""
@@ -1208,8 +1323,8 @@ const refreshMerchantDocumentation = async (
             <FormSection
               number="3"
               title="Servicios contratados"
-              description="Podés seleccionar uno o varios productos BENEFI."
-            >
+              description="Podés seleccionar uno o varios productos BENEFI y configurar las condiciones de procesamiento."
+             >
               <div className="grid gap-3 md:grid-cols-2">
                 {serviceOptions.map((service) => {
                   const selected =
@@ -1224,7 +1339,7 @@ const refreshMerchantDocumentation = async (
                       onClick={() =>
                         toggleService(service.value)
                       }
-                      className={`rounded-xl border p-3 md:p-4 text-left transition ${
+                      className={`rounded-xl border p-3 text-left transition md:p-4 ${
                         selected
                           ? "border-slate-950 bg-slate-950 text-white"
                           : "border-slate-200 bg-white text-slate-900 hover:border-slate-400"
@@ -1261,6 +1376,194 @@ const refreshMerchantDocumentation = async (
                   );
                 })}
               </div>
+
+              {formData.contracted_services.includes(
+                "payment_processing"
+              ) && (
+                <div className="mt-5 space-y-4">
+                  {/* PLANES DE CUOTAS */}
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-950">
+                          Planes de cuotas
+                        </p>
+
+                        <p className="mt-1 text-xs leading-5 text-slate-500">
+                          Definí si el comercio asume los costos
+                          financieros de las ventas en cuotas.
+                        </p>
+                      </div>
+
+                      {activeInstallmentPeriod && (
+                        <span className="w-fit rounded-full bg-white px-3 py-1 text-xs font-medium text-blue-700 shadow-sm">
+                          {activeInstallmentPeriod}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="mt-4">
+                      <p className="mb-2 text-sm font-medium text-slate-700">
+                        ¿El comercio asume los costos financieros?
+                      </p>
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleChange(
+                              "assumes_installment_financial_cost",
+                              "yes"
+                            )
+                          }
+                          className={`rounded-xl border p-3 text-left transition ${
+                            formData.assumes_installment_financial_cost ===
+                            "yes"
+                              ? "border-emerald-600 bg-emerald-50"
+                              : "border-slate-200 bg-white hover:border-slate-400"
+                          }`}
+                        >
+                          <p className="font-medium text-slate-950">
+                            Sí, los asume
+                          </p>
+
+                          <p className="mt-1 text-xs leading-5 text-slate-500">
+                            El costo financiero correspondiente al
+                            plan seleccionado será asumido por el
+                            comercio.
+                          </p>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleChange(
+                              "assumes_installment_financial_cost",
+                              "no"
+                            )
+                          }
+                          className={`rounded-xl border p-3 text-left transition ${
+                            formData.assumes_installment_financial_cost ===
+                            "no"
+                              ? "border-blue-600 bg-blue-50"
+                              : "border-slate-200 bg-white hover:border-slate-400"
+                          }`}
+                        >
+                          <p className="font-medium text-slate-950">
+                            No los asume
+                          </p>
+
+                          <p className="mt-1 text-xs leading-5 text-slate-500">
+                            El comercio no asumirá los costos
+                            financieros de los planes de cuotas.
+                          </p>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                          Configuración vigente
+                        </p>
+
+                        <p className="mt-1 text-sm font-medium text-slate-700">
+                          {activeInstallmentPeriod ||
+                            "Sin configuración activa"}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowInstallmentPlansModal(true)
+                        }
+                        disabled={
+                          activeInstallmentRates.length === 0
+                        }
+                        className="w-full rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-medium text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                      >
+                        Ver detalle de planes
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* ACREDITACIÓN DÉBITO */}
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-semibold text-slate-950">
+                      Acreditación con tarjeta de débito
+                    </p>
+
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Seleccioná cuándo desea recibir el comercio
+                      los fondos correspondientes a ventas con
+                      tarjeta de débito.
+                    </p>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleChange(
+                            "debit_settlement_days",
+                            "1"
+                          )
+                        }
+                        className={`rounded-xl border p-4 text-left transition ${
+                          formData.debit_settlement_days === "1"
+                            ? "border-slate-950 bg-slate-950 text-white"
+                            : "border-slate-200 bg-white text-slate-950 hover:border-slate-400"
+                        }`}
+                      >
+                        <p className="text-lg font-semibold">
+                          1 día
+                        </p>
+
+                        <p
+                          className={`mt-1 text-xs leading-5 ${
+                            formData.debit_settlement_days === "1"
+                              ? "text-slate-300"
+                              : "text-slate-500"
+                          }`}
+                        >
+                          Acreditación de fondos al siguiente día
+                          según las condiciones operativas.
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleChange(
+                            "debit_settlement_days",
+                            "2"
+                          )
+                        }
+                        className={`rounded-xl border p-4 text-left transition ${
+                          formData.debit_settlement_days === "2"
+                            ? "border-slate-950 bg-slate-950 text-white"
+                            : "border-slate-200 bg-white text-slate-950 hover:border-slate-400"
+                        }`}
+                      >
+                        <p className="text-lg font-semibold">
+                          2 días
+                        </p>
+
+                        <p
+                          className={`mt-1 text-xs leading-5 ${
+                            formData.debit_settlement_days === "2"
+                              ? "text-slate-300"
+                              : "text-slate-500"
+                          }`}
+                        >
+                          Acreditación de fondos a los dos días
+                          según las condiciones operativas.
+                        </p>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </FormSection>
 
             {/* DATOS BANCARIOS */}
@@ -1625,31 +1928,71 @@ const refreshMerchantDocumentation = async (
                       />
                     </dl>
 
-                    <div className="mt-4 border-t border-slate-100 pt-3">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                        Servicios contratados
+                    {(merchant.contracted_services || []).length === 0 ? (
+                      <p className="mt-2 text-xs text-slate-500">
+                        Sin servicios seleccionados
                       </p>
-
-                      {(merchant.contracted_services || [])
-                        .length === 0 ? (
-                        <p className="mt-2 text-xs text-slate-500">
-                          Sin servicios seleccionados
-                        </p>
-                      ) : (
+                    ) : (
+                      <>
                         <div className="mt-2 flex flex-wrap gap-1.5">
-                          {(
-                            merchant.contracted_services || []
-                          ).map((service) => (
-                            <span
-                              key={service}
-                              className="rounded-md bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700"
-                            >
-                              {getServiceLabel(service)}
-                            </span>
-                          ))}
+                          {(merchant.contracted_services || []).map(
+                            (service) => (
+                              <span
+                                key={service}
+                                className="rounded-md bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700"
+                              >
+                                {getServiceLabel(service)}
+                              </span>
+                            )
+                          )}
                         </div>
-                      )}
-                    </div>
+
+                        {(merchant.contracted_services || []).includes(
+                          "payment_processing"
+                        ) && (
+                          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                              Condiciones de procesamiento
+                            </p>
+
+                            <div className="mt-3 space-y-2 text-xs">
+                              <MerchantDetail
+                                label="Costos financieros"
+                                value={
+                                  merchant.assumes_installment_financial_cost ===
+                                  null
+                                    ? "Sin definir"
+                                    : merchant.assumes_installment_financial_cost
+                                      ? "Asume el comercio"
+                                      : "No asume el comercio"
+                                }
+                              />
+
+                              <MerchantDetail
+                                label="Acreditación débito"
+                                value={
+                                  merchant.debit_settlement_days
+                                    ? `${merchant.debit_settlement_days} ${
+                                        merchant.debit_settlement_days === 1
+                                          ? "día"
+                                          : "días"
+                                      }`
+                                    : "Sin definir"
+                                }
+                              />
+
+                              <MerchantDetail
+                                label="Planes vigentes"
+                                value={
+                                  activeInstallmentPeriod ||
+                                  "Sin configuración activa"
+                                }
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </article>
                 );
               })}
@@ -1658,6 +2001,16 @@ const refreshMerchantDocumentation = async (
           </div>
         </section>
       </div>
+
+      {showInstallmentPlansModal && (
+        <InstallmentPlansModal
+          period={activeInstallmentPeriod}
+          rates={activeInstallmentRates}
+          onClose={() =>
+            setShowInstallmentPlansModal(false)
+          }
+        />
+      )}
     </main>
   );
 }
@@ -1825,6 +2178,90 @@ function MerchantDetail({
       <dd className="max-w-[65%] text-right font-medium text-slate-700">
         {value}
       </dd>
+    </div>
+  );
+}
+function InstallmentPlansModal({
+  period,
+  rates,
+  onClose,
+}: {
+  period: string;
+  rates: {
+    installments: number;
+    financial_cost_rate: number;
+    is_enabled: boolean;
+  }[];
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className="border-b border-slate-200 px-5 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-950">
+                Detalle de planes de cuotas
+              </h3>
+
+              <p className="mt-1 text-sm text-slate-500">
+                {period ||
+                  "Configuración vigente"}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-lg text-slate-600 transition hover:bg-slate-50"
+              aria-label="Cerrar"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto p-4 md:p-5">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {rates.map((rate) => (
+              <div
+                key={rate.installments}
+                className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+              >
+                <div>
+                  <p className="font-semibold text-slate-950">
+                    {rate.installments} cuotas
+                  </p>
+
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Costo financiero
+                  </p>
+                </div>
+
+                <p className="text-lg font-bold text-blue-700">
+                  {Number(
+                    rate.financial_cost_rate
+                  ).toLocaleString("es-AR", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                  %
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-t border-slate-200 bg-slate-50 px-5 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 sm:w-auto"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

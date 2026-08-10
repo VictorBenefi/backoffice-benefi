@@ -345,6 +345,7 @@ export async function uploadMerchantDocument({
   observations: normalizeNullableText(observations),
 
   status: "pending",
+  
   review_status: "pending",
   reviewer_comment: null,
   reviewed_by: null,

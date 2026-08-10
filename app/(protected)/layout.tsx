@@ -69,6 +69,12 @@ export default async function ProtectedLayout({
       label: "Liquidación comisiones",
       roles: ["admin", "supervisor"],
     },
+
+    {
+      href: "/planes-cuotas",
+      label: "Config. planes de cuotas",
+      roles: ["admin", "supervisor"],
+    },
     {
       href: "/usuarios",
       label: "Usuarios",
