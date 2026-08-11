@@ -47,13 +47,17 @@ type Merchant = {
 
   entity_type: string | null;
   representative_name: string | null;
+  representative_first_name: string | null;
+  representative_last_name: string | null;
+  representative_phone: string | null;
   representative_document: string | null;
   representative_cuit: string | null;
   representative_birth_date: string | null;
   representative_email: string | null;
-
+  representative_role: string | null;
   bank_name: string | null;
   bank_account_holder: string | null;
+  bank_account_type: string | null;
   bank_cbu: string | null;
   bank_alias: string | null;
 
@@ -109,12 +113,16 @@ type FormData = {
 
   entity_type: string;
   representative_name: string;
+  representative_first_name: string;
+  representative_last_name: string;
+  representative_phone: string;
   representative_cuit: string;
   representative_birth_date: string;
   representative_email: string;
-
+  representative_role: string;
   bank_name: string;
   bank_account_holder: string;
+  bank_account_type: string;
   bank_cbu: string;
   bank_alias: string;
 
@@ -146,14 +154,19 @@ const emptyForm: FormData = {
 
   entity_type: "",
   representative_name: "",
-  representative_cuit: "",
+  representative_first_name: "",
+  representative_last_name: "",
+  representative_phone: "",
+    representative_cuit: "",
   representative_birth_date: "",
   representative_email: "",
+  representative_role: "",
 
   bank_name: "",
   bank_account_holder: "",
   bank_cbu: "",
   bank_alias: "",
+  bank_account_type: "",
 
   contracted_services: [],
   assumes_installment_financial_cost: "",
@@ -285,6 +298,9 @@ export default function ComerciosPage() {
   const [message, setMessage] = useState("");
   const [showInstallmentPlansModal, setShowInstallmentPlansModal] =
   useState(false);
+
+  const [merchantToDelete, setMerchantToDelete] =
+  useState<string | null>(null);
 
   const isVendorUser = currentRole === "vendedor";
   const canSelectVendor = managementRoles.includes(currentRole);
@@ -904,7 +920,24 @@ const refreshMerchantDocumentation = async (
 
       entity_type: formData.entity_type,
       representative_name: nullableText(
-        formData.representative_name
+        [
+          formData.representative_first_name.trim(),
+          formData.representative_last_name.trim(),
+        ]
+          .filter(Boolean)
+          .join(" ")
+      ),
+
+      representative_first_name: nullableText(
+        formData.representative_first_name
+      ),
+
+      representative_last_name: nullableText(
+        formData.representative_last_name
+      ),
+
+      representative_phone: nullableText(
+        formData.representative_phone
       ),
       representative_document: nullableText(
         formData.representative_cuit
@@ -916,12 +949,23 @@ const refreshMerchantDocumentation = async (
         formData.representative_birth_date || null,
       representative_email:
         nullableText(formData.representative_email)?.toLowerCase() || null,
+      
+      representative_role: nullableText(
+        formData.representative_role
+      ),
 
       bank_name: nullableText(formData.bank_name),
+
       bank_account_holder: nullableText(
         formData.bank_account_holder
       ),
+
+      bank_account_type: nullableText(
+        formData.bank_account_type
+      ),
+
       bank_cbu: nullableText(formData.bank_cbu),
+
       bank_alias: nullableText(formData.bank_alias),
 
       contracted_services: formData.contracted_services,
@@ -995,6 +1039,15 @@ const refreshMerchantDocumentation = async (
         setMessage(
           "Comercio creado correctamente. Ya podés completar su legajo documental."
         );
+
+        setTimeout(() => {
+        document
+          .getElementById("merchant-documentation")
+          ?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+      }, 150);
       }
 
       if (editingId) {
@@ -1040,7 +1093,17 @@ const refreshMerchantDocumentation = async (
       province: merchant.province || "",
 
       entity_type: merchant.entity_type || "",
-      representative_name: merchant.representative_name || "",
+      representative_name:
+        merchant.representative_name || "",
+
+      representative_first_name:
+        merchant.representative_first_name || "",
+
+      representative_last_name:
+        merchant.representative_last_name || "",
+
+      representative_phone:
+        merchant.representative_phone || "",
       representative_cuit:
         merchant.representative_cuit ||
         merchant.representative_document ||
@@ -1048,9 +1111,14 @@ const refreshMerchantDocumentation = async (
       representative_birth_date:
         merchant.representative_birth_date || "",
       representative_email: merchant.representative_email || "",
+      representative_role:
+      merchant.representative_role || "",
 
       bank_name: merchant.bank_name || "",
-      bank_account_holder: merchant.bank_account_holder || "",
+      bank_account_holder:
+        merchant.bank_account_holder || "",
+      bank_account_type:
+        merchant.bank_account_type || "",
       bank_cbu: merchant.bank_cbu || "",
       bank_alias: merchant.bank_alias || "",
 
@@ -1081,33 +1149,39 @@ const refreshMerchantDocumentation = async (
     });
   };
 
-  const handleDelete = async (id: string) => {
-    const confirmed = window.confirm(
-      "¿Seguro que querés eliminar este comercio? También se eliminará su legajo documental asociado."
+  const handleDelete = (id: string) => {
+  setMerchantToDelete(id);
+};
+
+const confirmDelete = async () => {
+  if (!merchantToDelete) return;
+
+  const id = merchantToDelete;
+
+  setMessage("");
+
+  const { error } = await supabase
+    .from("merchants")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    console.error(error);
+    setMessage(
+      `Error al eliminar comercio: ${error.message}`
     );
+    return;
+  }
 
-    if (!confirmed) return;
+  if (editingId === id) {
+    resetForm();
+  }
 
-    setMessage("");
+  setMerchantToDelete(null);
+  setMessage("Comercio eliminado correctamente.");
 
-    const { error } = await supabase
-      .from("merchants")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      console.error(error);
-      setMessage(`Error al eliminar comercio: ${error.message}`);
-      return;
-    }
-
-    if (editingId === id) {
-      resetForm();
-    }
-
-    setMessage("Comercio eliminado correctamente.");
-    await loadMerchants();
-  };
+  await loadMerchants();
+};
 
   const filteredMerchants = useMemo(() => {
     const text = search.trim().toLowerCase();
@@ -1260,7 +1334,7 @@ const refreshMerchantDocumentation = async (
                   <input type="text" className={inputClass} value={formData.apartment} onChange={(event) => handleChange("apartment", event.target.value)} placeholder="Ej: B" />
                 </Field>
 
-                <Field label="Código postal">
+                <Field label="Código postal (CPA)">
                   <input type="text" className={inputClass} value={formData.postal_code} onChange={(event) => handleChange("postal_code", event.target.value)} placeholder="Ej: 4400" />
                 </Field>
 
@@ -1301,8 +1375,54 @@ const refreshMerchantDocumentation = async (
                   </div>
                 </Field>
 
-                <Field label="Representante legal">
-                  <input type="text" className={inputClass} value={formData.representative_name} onChange={(event) => handleChange("representative_name", event.target.value)} placeholder="Nombre y apellido" />
+                <Field label="Nombre del representante">
+                  <input
+                    type="text"
+                    className={inputClass}
+                    value={formData.representative_first_name}
+                    onChange={(event) =>
+                      handleChange(
+                        "representative_first_name",
+                        event.target.value
+                      )
+                    }
+                    placeholder="Nombre"
+                  />
+                </Field>
+
+                <Field label="Apellido del representante">
+                  <input
+                    type="text"
+                    className={inputClass}
+                    value={formData.representative_last_name}
+                    onChange={(event) =>
+                      handleChange(
+                        "representative_last_name",
+                        event.target.value
+                      )
+                    }
+                    placeholder="Apellido"
+                  />
+                </Field>
+
+                <Field label="Carácter del representante">
+                  <select
+                    className={inputClass}
+                    value={formData.representative_role}
+                    onChange={(event) =>
+                      handleChange(
+                        "representative_role",
+                        event.target.value
+                      )
+                    }
+                  >
+                    <option value="">Seleccionar carácter</option>
+                    <option value="Presidente">Presidente</option>
+                    <option value="Socio gerente">Socio gerente</option>
+                    <option value="Apoderado">Apoderado</option>
+                    <option value="Titular">Titular</option>
+                    <option value="Otro">Otro</option>
+                  </select>
                 </Field>
 
                 <Field label="CUIT/CUIL del representante">
@@ -1315,6 +1435,21 @@ const refreshMerchantDocumentation = async (
 
                 <Field label="Email del representante">
                   <input type="email" className={inputClass} value={formData.representative_email} onChange={(event) => handleChange("representative_email", event.target.value)} placeholder="representante@email.com" />
+                </Field>
+
+                <Field label="Teléfono del representante">
+                  <input
+                    type="tel"
+                    className={inputClass}
+                    value={formData.representative_phone}
+                    onChange={(event) =>
+                      handleChange(
+                        "representative_phone",
+                        event.target.value
+                      )
+                    }
+                    placeholder="Ej: 387 4567890"
+                  />
                 </Field>
               </div>
             </FormSection>
@@ -1581,6 +1716,27 @@ const refreshMerchantDocumentation = async (
                   <input type="text" className={inputClass} value={formData.bank_account_holder} onChange={(event) => handleChange("bank_account_holder", event.target.value)} placeholder="Nombre o razón social" />
                 </Field>
 
+                <Field label="Tipo de cuenta">
+                  <select
+                    className={inputClass}
+                    value={formData.bank_account_type}
+                    onChange={(event) =>
+                      handleChange(
+                        "bank_account_type",
+                        event.target.value
+                      )
+                    }
+                  >
+                    <option value="">Seleccionar tipo de cuenta</option>
+                    <option value="Cuenta corriente">
+                      Cuenta corriente
+                    </option>
+                    <option value="Caja de ahorro">
+                      Caja de ahorro
+                    </option>
+                  </select>
+                </Field>
+
                 <Field label="CBU">
                   <input type="text" inputMode="numeric" maxLength={22} className={inputClass} value={formData.bank_cbu} onChange={(event) => handleChange("bank_cbu", event.target.value.replace(/\D/g, "").slice(0, 22))} placeholder="22 dígitos" />
                 </Field>
@@ -1592,73 +1748,75 @@ const refreshMerchantDocumentation = async (
             </FormSection>
 
             {/* DOCUMENTACIÓN */}
-            <FormSection
-              number="5"
-              title="Documentación requerida"
-              description="Los requisitos se cargan automáticamente según el tipo de entidad."
-            >
-              {!savedMerchantId ? (
-                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5">
-                  <p className="font-medium text-slate-800">
-                    Guardá primero el comercio
-                  </p>
+            <div id="merchant-documentation">
+              <FormSection
+                number="5"
+                title="Documentación requerida"
+                description="Los requisitos se cargan automáticamente según el tipo de entidad."
+              >
+                {!savedMerchantId ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5">
+                    <p className="font-medium text-slate-800">
+                      Guardá primero el comercio
+                    </p>
 
-                  <p className="mt-2 text-sm text-slate-500">
-                    Una vez creado el comercio se habilitará automáticamente el Legajo
-                    Documental para cargar todos los archivos requeridos.
-                  </p>
-                </div>
-              ) : !formData.entity_type ? (
-                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-500">
-                  Seleccioná primero si el comercio corresponde a una
-                  persona humana o a una empresa.
-                </div>
-              ) : visibleRequirements.length === 0 ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
-                  No existen requisitos documentales configurados para
-                  este tipo de entidad.
-                </div>
-              ) : (
-                  <div className="space-y-4">
-                    <DocumentProgress
-                      uploaded={selectedMerchantProgress.uploaded}
-                      totalRequired={
-                        selectedMerchantProgress.totalRequired
-                      }
-                      percentage={
-                        selectedMerchantProgress.percentage
-                      }
-                    />
+                    <p className="mt-2 text-sm text-slate-500">
+                      Una vez creado el comercio se habilitará automáticamente el Legajo
+                      Documental para cargar todos los archivos requeridos.
+                    </p>
+                  </div>
+                ) : !formData.entity_type ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-500">
+                    Seleccioná primero si el comercio corresponde a una
+                    persona humana o a una empresa.
+                  </div>
+                ) : visibleRequirements.length === 0 ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
+                    No existen requisitos documentales configurados para
+                    este tipo de entidad.
+                  </div>
+                ) : (
+                    <div className="space-y-4">
+                      <DocumentProgress
+                        uploaded={selectedMerchantProgress.uploaded}
+                        totalRequired={
+                          selectedMerchantProgress.totalRequired
+                        }
+                        percentage={
+                          selectedMerchantProgress.percentage
+                        }
+                      />
 
-                    <div className="space-y-3">
-                      {visibleRequirements.map((requirement) => (
-                        <DocumentUploadCard
-                          key={requirement.id}
+                      <div className="space-y-3">
+                        {visibleRequirements.map((requirement) => (
+                          <DocumentUploadCard
+                            key={requirement.id}
+                            supabase={supabase}
+                            merchantId={savedMerchantId}
+                            requirement={requirement}
+                            canReview={
+                              currentRole === "admin" ||
+                              currentRole === "supervisor" ||
+                              currentRole === "operaciones"
+                            }
+                            onDocumentChanged={async () => {
+                              await refreshMerchantDocumentation(savedMerchantId);
+                            }}
+                          />
+                        ))}
+
+                        <OtherDocumentsUploader
                           supabase={supabase}
                           merchantId={savedMerchantId}
-                          requirement={requirement}
-                          canReview={
-                            currentRole === "admin" ||
-                            currentRole === "supervisor" ||
-                            currentRole === "operaciones"
-                          }
                           onDocumentChanged={async () => {
                             await refreshMerchantDocumentation(savedMerchantId);
                           }}
                         />
-                      ))}
-
-                      <OtherDocumentsUploader
-                        supabase={supabase}
-                        merchantId={savedMerchantId}
-                        onDocumentChanged={async () => {
-                          await refreshMerchantDocumentation(savedMerchantId);
-                        }}
-                      />
+                      </div>
                     </div>
-                  </div>
-                )}
-            </FormSection>
+                  )}
+              </FormSection>
+            </div>
 
             {/* ASIGNACIÓN */}
             <FormSection
@@ -2010,6 +2168,46 @@ const refreshMerchantDocumentation = async (
             setShowInstallmentPlansModal(false)
           }
         />
+      )}
+      {merchantToDelete && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+            <div className="border-b border-slate-200 px-6 py-5">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Eliminar comercio
+              </h3>
+            </div>
+
+            <div className="px-6 py-5">
+              <p className="text-sm leading-6 text-slate-600">
+                ¿Querés eliminar este comercio?
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                También se eliminará el legajo documental asociado.
+                Esta acción no se puede deshacer.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setMerchantToDelete(null)}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={confirmDelete}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+              >
+                Eliminar comercio
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );

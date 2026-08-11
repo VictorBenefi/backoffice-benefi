@@ -30,6 +30,11 @@ export default async function ProtectedLayout({
       roles: ["admin", "supervisor", "operaciones", "vendedor"],
     },
     {
+      href: "/exportaciones-menta",
+      label: "Altas MENTA",
+      roles: ["admin", "supervisor", "operaciones"],
+    },
+    {
       href: "/pos",
       label: "POS",
       roles: ["admin", "supervisor", "operaciones", "soporte", "vendedor"],
