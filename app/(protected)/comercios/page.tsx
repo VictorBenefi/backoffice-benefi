@@ -1212,6 +1212,8 @@ const refreshMerchantDocumentation = async (
       contracted_services:
         merchant.contracted_services || [],
 
+      observations: merchant.observations || "",
+
       assumes_installment_financial_cost:
         merchant.assumes_installment_financial_cost === null ||
         merchant.assumes_installment_financial_cost === undefined
