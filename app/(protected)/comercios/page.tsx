@@ -67,6 +67,7 @@ debit_settlement_days: number | null;
 
   documentation_status: string | null;
   onboarding_status: string | null;
+  observations: string | null;
 
   vendor_id: string | null;
   created_at: string;
@@ -129,6 +130,7 @@ type FormData = {
   contracted_services: string[];
   assumes_installment_financial_cost: string;
 debit_settlement_days: string;
+observations: string;
 
   vendor_id: string;
 };
@@ -171,6 +173,7 @@ const emptyForm: FormData = {
   contracted_services: [],
   assumes_installment_financial_cost: "",
 debit_settlement_days: "",
+observations: "",
 
   vendor_id: "",
 };
@@ -272,8 +275,11 @@ const onboardingStatusLabels: Record<string, string> = {
   inactive: "Inactivo",
 };
 
-function nullableText(value: string) {
-  const normalized = value.trim();
+function nullableText(
+  value: string | null | undefined
+) {
+  const normalized = String(value ?? "").trim();
+
   return normalized || null;
 }
 
@@ -310,6 +316,11 @@ export default function ComerciosPage() {
 
   const [activeInstallmentPeriod, setActiveInstallmentPeriod] =
     useState("");
+  const [duplicateCuitWarning, setDuplicateCuitWarning] =
+  useState(false);
+
+  const [pendingDuplicatePayload, setPendingDuplicatePayload] =
+    useState<any | null>(null);
 
   const [activeInstallmentRates, setActiveInstallmentRates] =
     useState<
@@ -979,6 +990,8 @@ const refreshMerchantDocumentation = async (
         formData.debit_settlement_days === ""
           ? null
           : Number(formData.debit_settlement_days),
+      
+      observations: nullableText(formData.observations),
 
       vendor_id: effectiveVendorId,
           };
@@ -995,22 +1008,35 @@ const refreshMerchantDocumentation = async (
         }
 
         setMessage("Comercio actualizado correctamente.");
-      } else {
-        const { data: existingMerchant, error: duplicateError } =
+
+        setEditingId(null);
+        setSavedMerchantId(null);
+        setFormData(getInitialForm(currentVendor));
+
+        window.scrollTo({
+          top: 0,
+          behavior: "smooth",
+        });
+      }
+      else {
+        const { data: existingMerchants, error: duplicateError } =
           await supabase
             .from("merchants")
-            .select("id")
-            .eq("cuit", formData.cuit.trim())
-            .maybeSingle();
+            .select("id, name, legal_name, address")
+            .eq("cuit", formData.cuit.trim());
 
         if (duplicateError) {
           throw new Error(duplicateError.message);
         }
 
-        if (existingMerchant) {
-          throw new Error(
-            "Ya existe un comercio registrado con ese CUIT."
-          );
+        if (
+          existingMerchants &&
+          existingMerchants.length > 0
+        ) {
+          setPendingDuplicatePayload(payload);
+          setDuplicateCuitWarning(true);
+          setLoading(false);
+          return;
         }
 
         const { data: createdMerchant, error } = await supabase
@@ -1067,6 +1093,67 @@ const refreshMerchantDocumentation = async (
       setLoading(false);
     }
   };
+
+  const confirmDuplicateCuitSave = async () => {
+  if (!pendingDuplicatePayload) return;
+
+  setLoading(true);
+  setMessage("");
+
+  try {
+    const { data: createdMerchant, error } =
+      await supabase
+        .from("merchants")
+        .insert({
+          ...pendingDuplicatePayload,
+          documentation_status: "incomplete",
+          onboarding_status: "documentation_pending",
+        })
+        .select("id")
+        .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (!createdMerchant?.id) {
+      throw new Error(
+        "El comercio se creó, pero no se pudo obtener su identificador."
+      );
+    }
+
+    setDuplicateCuitWarning(false);
+    setPendingDuplicatePayload(null);
+
+    setEditingId(createdMerchant.id);
+    setSavedMerchantId(createdMerchant.id);
+
+    setMessage(
+      "Comercio creado correctamente. Ya podés completar su legajo documental."
+    );
+
+    await loadMerchants();
+
+    setTimeout(() => {
+      document
+        .getElementById("merchant-documentation")
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+    }, 150);
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : "Ocurrió un error al guardar el comercio.";
+
+    console.error(error);
+    setMessage(`Error: ${errorMessage}`);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleEdit = (merchant: Merchant) => {
     setEditingId(merchant.id);
@@ -1142,6 +1229,8 @@ const refreshMerchantDocumentation = async (
         ? currentVendor?.id || ""
         : merchant.vendor_id || "",
     });
+
+    observations: merchant.observations || "",
 
     window.scrollTo({
       top: 0,
@@ -1818,9 +1907,28 @@ const confirmDelete = async () => {
               </FormSection>
             </div>
 
+            {/* OBSERVACIONES */}
+              <FormSection
+                number="6"
+                title="Observaciones del comercio"
+                description="Información interna adicional relacionada con el comercio."
+              >
+                <textarea
+                  className={`${inputClass} min-h-28 resize-y`}
+                  value={formData.observations}
+                  onChange={(event) =>
+                    handleChange(
+                      "observations",
+                      event.target.value
+                    )
+                  }
+                  placeholder="Ej: información adicional del comercio, particularidades del alta, referencias internas..."
+                />
+              </FormSection>
+
             {/* ASIGNACIÓN */}
             <FormSection
-              number="6"
+              number="7"
               title="Asignación comercial"
               description="Define qué vendedor será responsable del comercio."
               last
@@ -2033,7 +2141,7 @@ const confirmDelete = async () => {
                       />
                     </div>
 
-                    <dl className="mt-4 grid gap-2 text-xs text-slate-600">
+                    <dl className="mt-4 grid gap-2.5">
                       <MerchantDetail
                         label="CUIT"
                         value={merchant.cuit || "-"}
@@ -2109,7 +2217,7 @@ const confirmDelete = async () => {
                           "payment_processing"
                         ) && (
                           <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-[#1E3A5F]">
                               Condiciones de procesamiento
                             </p>
 
@@ -2204,6 +2312,56 @@ const confirmDelete = async () => {
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
               >
                 Eliminar comercio
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {duplicateCuitWarning && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+            <div className="border-b border-slate-200 px-6 py-5">
+              <h3 className="text-lg font-semibold text-slate-900">
+                CUIT ya registrado
+              </h3>
+            </div>
+
+            <div className="px-6 py-5">
+              <p className="text-sm leading-6 text-slate-600">
+                Ya existe uno o más comercios registrados con este CUIT.
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Puede tratarse de otra sucursal o punto de venta de la misma razón social.
+              </p>
+
+              <p className="mt-3 text-sm font-medium text-slate-900">
+                ¿Querés guardar este comercio de todas formas?
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setDuplicateCuitWarning(false);
+                  setPendingDuplicatePayload(null);
+                }}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={confirmDuplicateCuitSave}
+                disabled={loading}
+                className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+              >
+                {loading
+                  ? "Guardando..."
+                  : "Guardar de todas formas"}
               </button>
             </div>
           </div>
@@ -2370,10 +2528,12 @@ function MerchantDetail({
   value: string;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3">
-      <dt className="text-slate-400">{label}</dt>
+    <div className="grid grid-cols-[110px_minmax(0,1fr)] items-start gap-3">
+      <dt className="text-xs font-medium text-slate-500">
+        {label}
+      </dt>
 
-      <dd className="max-w-[65%] text-right font-medium text-slate-700">
+      <dd className="break-words text-right text-sm font-semibold text-slate-800">
         {value}
       </dd>
     </div>

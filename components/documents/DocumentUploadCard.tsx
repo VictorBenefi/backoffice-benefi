@@ -62,6 +62,7 @@ export default function DocumentUploadCard({
 }: DocumentUploadCardProps) {
   const [documents, setDocuments] = useState<MerchantDocument[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [showUploadForm, setShowUploadForm] = useState(false);
 
   const [relatedPersonName, setRelatedPersonName] = useState("");
   const [relatedPersonDocument, setRelatedPersonDocument] =
@@ -225,9 +226,11 @@ const [savingCommentId, setSavingCommentId] =
       );
 
       clearUploadForm();
+      setShowUploadForm(false);
+
       await loadDocuments();
       await onDocumentChanged?.();
-    } catch (error) {
+          } catch (error) {
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -268,16 +271,17 @@ const [savingCommentId, setSavingCommentId] =
   const hasDocuments = currentDocuments.length > 0;
 
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <article className="mb-6 overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-md">
+      <div className="h-1.5 w-full bg-[#1E3A5F]" />
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-300 bg-white px-5 py-5">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h4 className="font-medium text-slate-950">
+            <h4 className="text-base font-bold tracking-tight text-slate-950">
               {fileType?.name || "Documento"}
             </h4>
 
             {requirement.is_required && (
-              <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700">
+              <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-700">
                 Obligatorio
               </span>
             )}
@@ -306,6 +310,7 @@ const [savingCommentId, setSavingCommentId] =
           {hasDocuments ? "Cargado" : "Pendiente"}
         </span>
       </div>
+    <div className="px-5 pb-5">
 
       {loadingDocuments ? (
         <div className="mt-4 rounded-lg bg-slate-50 p-4 text-sm text-slate-500">
@@ -411,144 +416,173 @@ const [savingCommentId, setSavingCommentId] =
             </div>
           )}
 
-          <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4">
-            <div>
-              <p className="text-sm font-medium text-slate-800">
-                {hasDocuments && !allowsMultiple
-                  ? "Cargar una nueva versión"
-                  : "Adjuntar documento"}
-              </p>
+          <div className="mt-4">
+        <button
+          type="button"
+          onClick={() =>
+            setShowUploadForm((current) => !current)
+          }
+          className="flex w-full items-center justify-between rounded-xl border border-slate-300 bg-white px-4 py-3 text-left transition hover:border-slate-400 hover:bg-slate-50"
+        >
+          <div>
+            <p className="text-sm font-semibold text-slate-900">
+              {hasDocuments && !allowsMultiple
+                ? "Cargar una nueva versión"
+                : "Adjuntar documento"}
+            </p>
 
-              <p className="mt-1 text-xs leading-5 text-slate-500">
-                Se aceptan archivos PDF, JPG, PNG o WEBP de hasta
-                10 MB. Las versiones anteriores se conservarán.
-              </p>
-            </div>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {showUploadForm
+                ? "Ocultar formulario de carga"
+                : "Seleccioná para cargar un archivo"}
+            </p>
+          </div>
 
-            {allowsMultiple && (
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium text-slate-700">
-                    Persona relacionada
-                  </label>
+          <span className="text-lg font-medium text-slate-500">
+            {showUploadForm ? "−" : "+"}
+          </span>
+        </button>
+      </div>
 
-                  <input
-                    type="text"
-                    value={relatedPersonName}
-                    onChange={(event) =>
-                      setRelatedPersonName(event.target.value)
-                    }
-                    className={inputClass}
-                    placeholder="Nombre y apellido"
-                  />
-                </div>
+      {showUploadForm && (
+        <div className="mt-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4">
+          <div>
+            <p className="text-sm font-medium text-slate-800">
+              {hasDocuments && !allowsMultiple
+                ? "Cargar una nueva versión"
+                : "Adjuntar documento"}
+            </p>
 
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium text-slate-700">
-                    DNI o documento
-                  </label>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              Se aceptan archivos PDF, JPG, PNG o WEBP de hasta
+              10 MB. Las versiones anteriores se conservarán.
+            </p>
+          </div>
 
-                  <input
-                    type="text"
-                    value={relatedPersonDocument}
-                    onChange={(event) =>
-                      setRelatedPersonDocument(
-                        event.target.value
-                      )
-                    }
-                    className={inputClass}
-                    placeholder="Ej: 25.123.456"
-                  />
-                </div>
+          {allowsMultiple && (
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-700">
+                  Persona relacionada
+                </label>
+
+                <input
+                  type="text"
+                  value={relatedPersonName}
+                  onChange={(event) =>
+                    setRelatedPersonName(event.target.value)
+                  }
+                  className={inputClass}
+                  placeholder="Nombre y apellido"
+                />
               </div>
-            )}
 
-            <div className="mt-4">
-              <label className="mb-1.5 block text-xs font-medium text-slate-700">
-                Observaciones
-              </label>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-700">
+                  DNI o documento
+                </label>
 
-              <textarea
-                value={observations}
-                onChange={(event) =>
-                  setObservations(event.target.value)
-                }
-                className={`${inputClass} min-h-20 resize-y`}
-                placeholder="Información adicional sobre el documento..."
-              />
-            </div>
-
-            <div className="mt-4">
-              <label className="mb-1.5 block text-xs font-medium text-slate-700">
-                Archivo
-              </label>
-
-              <input
-                id={`document-file-${requirement.id}`}
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
-                onChange={handleFileSelection}
-                className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:text-xs file:font-medium file:text-white"
-              />
-            </div>
-
-            {selectedFile && (
-              <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
-                <p className="font-medium">
-                  Archivo seleccionado
-                </p>
-
-                <p className="mt-1 break-all">
-                  {selectedFile.name}
-                </p>
-
-                <p className="mt-1">
-                  Tamaño:{" "}
-                  {formatDocumentSize(selectedFile.size)}
-                </p>
+                <input
+                  type="text"
+                  value={relatedPersonDocument}
+                  onChange={(event) =>
+                    setRelatedPersonDocument(event.target.value)
+                  }
+                  className={inputClass}
+                  placeholder="Ej: 25.123.456"
+                />
               </div>
-            )}
+            </div>
+          )}
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={handleUpload}
-                disabled={!selectedFile || uploading}
-                className="rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 file:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {uploading
-                  ? "Subiendo..."
-                  : hasDocuments && !allowsMultiple
-                  ? "Subir nueva versión"
-                  : "Subir documento"}
-              </button>
+          <div className="mt-4">
+            <label className="mb-1.5 block text-xs font-medium text-slate-700">
+              Observaciones
+            </label>
 
-              {selectedFile && (
-                <button
-                  type="button"
-                  onClick={clearUploadForm}
-                  disabled={uploading}
-                  className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-white disabled:opacity-50"
+            <textarea
+              value={observations}
+              onChange={(event) =>
+                setObservations(event.target.value)
+              }
+              className={`${inputClass} min-h-20 resize-y`}
+              placeholder="Información adicional sobre el documento..."
+            />
+          </div>
+
+          <div className="mt-4">
+            <label className="mb-1.5 block text-xs font-medium text-slate-700">
+              Archivo
+            </label>
+
+            <input
+              id={`document-file-${requirement.id}`}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+              onChange={handleFileSelection}
+              className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:text-xs file:font-medium file:text-white"
+            />
+          </div>
+
+          {selectedFile && (
+  <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
+    <p className="font-medium">
+      Archivo seleccionado
+    </p>
+
+    <p className="mt-1 break-all">
+      {selectedFile.name}
+    </p>
+
+    <p className="mt-1">
+      Tamaño: {formatDocumentSize(selectedFile.size)}
+    </p>
+  </div>
+)}
+
+<div className="mt-4 flex flex-wrap gap-2">
+  <button
+    type="button"
+    onClick={handleUpload}
+    disabled={!selectedFile || uploading}
+    className="rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+  >
+    {uploading
+      ? "Subiendo..."
+      : hasDocuments && !allowsMultiple
+      ? "Subir nueva versión"
+      : "Subir documento"}
+  </button>
+
+  {selectedFile && (
+    <button
+      type="button"
+      onClick={clearUploadForm}
+      disabled={uploading}
+      className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-white disabled:opacity-50"
+    >
+      Cancelar selección
+    </button>
+  )}
+</div>
+</div>
+)}
+
+</>
+)}
+
+              {message && (
+                <div
+                  className={`mt-4 rounded-lg border px-3 py-2.5 text-sm ${
+                    isError
+                      ? "border-red-200 bg-red-50 text-red-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  }`}
                 >
-                  Cancelar selección
-                </button>
+                  {message}
+                </div>
               )}
             </div>
-          </div>
-        </>
-      )}
-
-      {message && (
-        <div
-          className={`mt-4 rounded-lg border px-3 py-2.5 text-sm ${
-            isError
-              ? "border-red-200 bg-red-50 text-red-700"
-              : "border-emerald-200 bg-emerald-50 text-emerald-700"
-          }`}
-        >
-          {message}
-        </div>
-      )}
-    </article>
-  );
-}
+          </article>
+        );
+        }
