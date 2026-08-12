@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
+import {
+  downloadMerchantDocumentsZip,
+} from "@/lib/merchant-documents";
 
 type Merchant = {
   id: string;
@@ -126,6 +129,8 @@ export default function ExportacionesMentaClient() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [downloadingZipId, setDownloadingZipId] =
+  useState<string | null>(null);
 
   const loadMerchants = async () => {
     setLoading(true);
@@ -307,6 +312,37 @@ export default function ExportacionesMentaClient() {
   ) => {
     return value?.trim() || "";
   };
+
+  const handleDownloadZip = async (
+  merchant: Merchant
+) => {
+  setDownloadingZipId(merchant.id);
+
+  try {
+    await downloadMerchantDocumentsZip({
+      supabase,
+      merchantId: merchant.id,
+      merchantName: merchant.name || "comercio",
+      merchantCuit: merchant.cuit,
+    });
+
+    toast.success(
+      `Documentación de ${
+        merchant.name || "comercio"
+      } descargada correctamente.`
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "No se pudo generar el ZIP.";
+
+    console.error(error);
+    toast.error(message);
+  } finally {
+    setDownloadingZipId(null);
+  }
+};
 
   const handleExport = async () => {
     if (selectedMerchants.length === 0) {
@@ -809,14 +845,26 @@ export default function ExportacionesMentaClient() {
                               </p>
                             </div>
 
-                            <CompletenessBadge
-                              complete={
-                                isComplete
-                              }
-                              missingCount={
-                                missingFields.length
-                              }
-                            />
+                            <div className="flex shrink-0 flex-wrap items-center gap-2">
+                              <CompletenessBadge
+                                complete={isComplete}
+                                missingCount={missingFields.length}
+                              />
+
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleDownloadZip(merchant);
+                                }}
+                                disabled={downloadingZipId === merchant.id}
+                                className="rounded-lg border border-[#1E3A5F]/30 bg-white px-3 py-1.5 text-xs font-semibold text-[#1E3A5F] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {downloadingZipId === merchant.id
+                                  ? "Generando ZIP..."
+                                  : "Descargar ZIP"}
+                              </button>
+                            </div>
                           </div>
 
                           <div className="mt-4 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">

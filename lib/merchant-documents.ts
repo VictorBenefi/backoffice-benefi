@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import JSZip from "jszip";
 
 export const MERCHANT_DOCUMENTS_BUCKET = "merchant-documents";
 export const MAX_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024;
@@ -158,6 +159,100 @@ export async function getCurrentDocuments(
   }
 
   return (data || []) as MerchantDocument[];
+}
+
+export async function downloadMerchantDocumentsZip({
+  supabase,
+  merchantId,
+  merchantName,
+  merchantCuit,
+}: {
+  supabase: SupabaseClient;
+  merchantId: string;
+  merchantName: string;
+  merchantCuit?: string | null;
+}) {
+  const documents = await getCurrentDocuments(
+    supabase,
+    merchantId
+  );
+
+  if (documents.length === 0) {
+    throw new Error(
+      "Este comercio todavía no tiene documentación cargada."
+    );
+  }
+
+  const zip = new JSZip();
+
+  for (const document of documents) {
+    const { data, error } = await supabase.storage
+      .from(MERCHANT_DOCUMENTS_BUCKET)
+      .download(document.file_path);
+
+    if (error || !data) {
+      throw new Error(
+        `No se pudo descargar el documento "${document.file_name}".`
+      );
+    }
+
+    const safeFileName =
+      sanitizeFileName(document.file_name) ||
+      `documento-${document.id}`;
+
+    let zipFileName = safeFileName;
+    let counter = 2;
+
+    while (zip.file(zipFileName)) {
+      const lastDot = safeFileName.lastIndexOf(".");
+
+      const base =
+        lastDot >= 0
+          ? safeFileName.slice(0, lastDot)
+          : safeFileName;
+
+      const extension =
+        lastDot >= 0
+          ? safeFileName.slice(lastDot)
+          : "";
+
+      zipFileName = `${base}-${counter}${extension}`;
+      counter += 1;
+    }
+
+    zip.file(zipFileName, data);
+  }
+
+  const zipBlob = await zip.generateAsync({
+    type: "blob",
+    compression: "DEFLATE",
+    compressionOptions: {
+      level: 6,
+    },
+  });
+
+  const safeMerchantName =
+    sanitizePathSegment(merchantName) || "comercio";
+
+  const safeCuit = String(merchantCuit ?? "")
+    .replace(/\D/g, "")
+    .trim();
+
+  const zipName = safeCuit
+    ? `${safeMerchantName}_${safeCuit}.zip`
+    : `${safeMerchantName}.zip`;
+
+  const downloadUrl = URL.createObjectURL(zipBlob);
+
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.download = zipName;
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  URL.revokeObjectURL(downloadUrl);
 }
 
 export async function getCurrentDocument(
