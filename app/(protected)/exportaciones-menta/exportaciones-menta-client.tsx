@@ -42,6 +42,21 @@ type Merchant = {
   created_at: string;
 };
 
+type MerchantBranch = {
+  id: string;
+  merchant_id: string;
+  branch_number: number;
+
+  street: string | null;
+  street_number: string | null;
+  floor: string | null;
+  apartment: string | null;
+  postal_code: string | null;
+  city: string | null;
+  province: string | null;
+  zone: string | null;
+};
+
 type MissingField = {
   label: string;
   field: string;
@@ -131,6 +146,40 @@ export default function ExportacionesMentaClient() {
   const [exporting, setExporting] = useState(false);
   const [downloadingZipId, setDownloadingZipId] =
   useState<string | null>(null);
+  const [branches, setBranches] = useState<MerchantBranch[]>([]);
+
+  const loadBranches = async () => {
+  const { data, error } = await supabase
+    .from("merchant_branches")
+    .select(`
+      id,
+      merchant_id,
+      branch_number,
+      street,
+      street_number,
+      floor,
+      apartment,
+      postal_code,
+      city,
+      province,
+      zone
+    `)
+    .order("branch_number", {
+      ascending: true,
+    });
+
+  if (error) {
+    console.error(error);
+
+    toast.error(
+      `No se pudieron cargar las sucursales: ${error.message}`
+    );
+
+    return;
+  }
+
+  setBranches((data || []) as MerchantBranch[]);
+};
 
   const loadMerchants = async () => {
     setLoading(true);
@@ -182,8 +231,11 @@ export default function ExportacionesMentaClient() {
   };
 
   useEffect(() => {
-    loadMerchants();
-  }, []);
+  Promise.all([
+    loadMerchants(),
+    loadBranches(),
+  ]);
+}, []);
 
   const filteredMerchants = useMemo(() => {
     const text = search.trim().toLowerCase();
@@ -414,90 +466,134 @@ export default function ExportacionesMentaClient() {
         "Usuario Comercio",
       ];
 
-      const merchantRows =
-        selectedMerchants.map(
-          (merchant) => [
-            safeText(merchant.name),
+      const merchantRows = selectedMerchants.flatMap(
+  (merchant) => {
+    const merchantBranches = branches
+      .filter(
+        (branch) =>
+          branch.merchant_id === merchant.id
+      )
+      .sort(
+        (a, b) =>
+          a.branch_number - b.branch_number
+      );
 
-            entityLabel(
-              merchant.entity_type
-            ),
+    const buildRow = ({
+      province,
+      city,
+      postalCode,
+      street,
+      streetNumber,
+      floor,
+      apartment,
+    }: {
+      province: string | null;
+      city: string | null;
+      postalCode: string | null;
+      street: string | null;
+      streetNumber: string | null;
+      floor: string | null;
+      apartment: string | null;
+    }) => [
+      safeText(merchant.name),
 
-            safeText(
-              merchant.legal_name
-            ),
+      entityLabel(
+        merchant.entity_type
+      ),
 
-            safeText(merchant.cuit),
+      safeText(
+        merchant.legal_name
+      ),
 
-            // Información adicional:
-            // se deja vacío para completar manualmente si corresponde.
-            "",
+      safeText(merchant.cuit),
 
-            safeText(
-              merchant.province
-            ),
+      // Información adicional.
+      "",
 
-            safeText(merchant.city),
+      safeText(province),
 
-            safeText(
-              merchant.postal_code
-            ),
+      safeText(city),
 
-            safeText(
-              merchant.street
-            ),
+      safeText(postalCode),
 
-            safeText(
-              merchant.street_number
-            ),
+      safeText(street),
 
-            safeText(merchant.floor),
+      safeText(streetNumber),
 
-            safeText(
-              merchant.apartment
-            ),
+      safeText(floor),
 
-            safeText(
-              merchant.bank_cbu
-            ),
+      safeText(apartment),
 
-            safeText(
-              merchant.bank_account_type
-            ),
+      safeText(
+        merchant.bank_cbu
+      ),
 
-            safeText(
-              merchant.tax_condition
-            ),
+      safeText(
+        merchant.bank_account_type
+      ),
 
-            safeText(
-              merchant.representative_first_name
-            ),
+      safeText(
+        merchant.tax_condition
+      ),
 
-            safeText(
-              merchant.representative_last_name
-            ),
+      safeText(
+        merchant.representative_first_name
+      ),
 
-            safeText(
-              merchant.representative_cuit
-            ),
+      safeText(
+        merchant.representative_last_name
+      ),
 
-            safeText(
-              merchant.representative_role
-            ),
+      safeText(
+        merchant.representative_cuit
+      ),
 
-            safeText(
-              merchant.representative_email
-            ),
+      safeText(
+        merchant.representative_role
+      ),
 
-            safeText(
-              merchant.representative_phone
-            ),
+      safeText(
+        merchant.representative_email
+      ),
 
-            // Usuario Comercio:
-            // lo completa Panda / MENTA.
-            "",
-          ]
-        );
+      safeText(
+        merchant.representative_phone
+      ),
+
+      // Usuario Comercio:
+      // lo completa Panda / MENTA.
+      "",
+    ];
+
+    const mainMerchantRow = buildRow({
+      province: merchant.province,
+      city: merchant.city,
+      postalCode: merchant.postal_code,
+      street: merchant.street,
+      streetNumber: merchant.street_number,
+      floor: merchant.floor,
+      apartment: merchant.apartment,
+    });
+
+    const branchRows = merchantBranches.map(
+      (branch) =>
+        buildRow({
+          province: branch.province,
+          city: branch.city,
+          postalCode: branch.postal_code,
+          street: branch.street,
+          streetNumber: branch.street_number,
+          floor: branch.floor,
+          apartment: branch.apartment,
+        })
+    );
+
+    return [
+      mainMerchantRow,
+      ...branchRows,
+    ];
+  }
+);
 
       const worksheet =
         XLSX.utils.aoa_to_sheet([

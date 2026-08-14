@@ -25,6 +25,35 @@ type Vendor = {
   auth_user_id?: string | null;
 };
 
+type MerchantBranch = {
+  id: string;
+  merchant_id: string;
+  branch_number: number;
+
+  street: string | null;
+  street_number: string | null;
+  floor: string | null;
+  apartment: string | null;
+  postal_code: string | null;
+  city: string | null;
+  province: string | null;
+  zone: string | null;
+
+  created_at: string;
+  updated_at: string;
+};
+
+type BranchFormData = {
+  street: string;
+  street_number: string;
+  floor: string;
+  apartment: string;
+  postal_code: string;
+  city: string;
+  province: string;
+  zone: string;
+};
+
 type Merchant = {
   id: string;
   name: string | null;
@@ -133,6 +162,17 @@ debit_settlement_days: string;
 observations: string;
 
   vendor_id: string;
+};
+
+const emptyBranchForm: BranchFormData = {
+  street: "",
+  street_number: "",
+  floor: "",
+  apartment: "",
+  postal_code: "",
+  city: "",
+  province: "",
+  zone: "",
 };
 
 const emptyForm: FormData = {
@@ -321,6 +361,48 @@ export default function ComerciosPage() {
 
   const [pendingDuplicatePayload, setPendingDuplicatePayload] =
     useState<any | null>(null);
+
+  const [branches, setBranches] = useState<MerchantBranch[]>([]);
+
+const [showBranchModal, setShowBranchModal] =
+  useState(false);
+
+const [branchForm, setBranchForm] =
+  useState<BranchFormData>(emptyBranchForm);
+
+const [editingBranchId, setEditingBranchId] =
+  useState<string | null>(null);
+
+const [savingBranch, setSavingBranch] =
+  useState(false);
+
+const [branchToDelete, setBranchToDelete] =
+  useState<MerchantBranch | null>(null);
+
+const [
+  showAddAnotherBranchModal,
+  setShowAddAnotherBranchModal,
+] = useState(false);
+
+const loadMerchantBranches = async (
+  merchantId: string
+) => {
+  const { data, error } = await supabase
+    .from("merchant_branches")
+    .select("*")
+    .eq("merchant_id", merchantId)
+    .order("branch_number", {
+      ascending: true,
+    });
+
+  if (error) {
+    throw new Error(
+      `No se pudieron cargar las sucursales: ${error.message}`
+    );
+  }
+
+  setBranches((data || []) as MerchantBranch[]);
+};
 
   const [activeInstallmentRates, setActiveInstallmentRates] =
     useState<
@@ -1155,7 +1237,141 @@ const refreshMerchantDocumentation = async (
   }
 };
 
-  const handleEdit = (merchant: Merchant) => {
+const confirmDeleteBranch = async () => {
+  if (!branchToDelete || !editingId) return;
+
+  setMessage("");
+
+  const { error } = await supabase
+    .from("merchant_branches")
+    .delete()
+    .eq("id", branchToDelete.id)
+    .eq("merchant_id", editingId);
+
+  if (error) {
+    console.error(error);
+    setMessage(
+      `Error al eliminar sucursal: ${error.message}`
+    );
+    return;
+  }
+
+  setBranchToDelete(null);
+
+  await loadMerchantBranches(editingId);
+
+  setMessage("Sucursal eliminada correctamente.");
+};
+  const handleSaveBranch = async () => {
+  if (!editingId) {
+    setMessage(
+      "Primero debés guardar el comercio antes de agregar sucursales."
+    );
+    return;
+  }
+
+  if (!branchForm.street.trim()) {
+    setMessage("Debés ingresar la calle de la sucursal.");
+    return;
+  }
+
+  if (!branchForm.city.trim()) {
+    setMessage("Debés ingresar la localidad de la sucursal.");
+    return;
+  }
+
+  if (!branchForm.province.trim()) {
+    setMessage("Debés seleccionar la provincia de la sucursal.");
+    return;
+  }
+
+  setSavingBranch(true);
+  setMessage("");
+
+  try {
+    const branchPayload = {
+      merchant_id: editingId,
+      street: nullableText(branchForm.street),
+      street_number: nullableText(branchForm.street_number),
+      floor: nullableText(branchForm.floor),
+      apartment: nullableText(branchForm.apartment),
+      postal_code: nullableText(branchForm.postal_code),
+      city: nullableText(branchForm.city),
+      province: nullableText(branchForm.province),
+      zone: nullableText(branchForm.zone),
+    };
+
+    if (editingBranchId) {
+      const { error } = await supabase
+        .from("merchant_branches")
+        .update(branchPayload)
+        .eq("id", editingBranchId)
+        .eq("merchant_id", editingId);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      await loadMerchantBranches(editingId);
+
+      setShowBranchModal(false);
+      setEditingBranchId(null);
+      setBranchForm(emptyBranchForm);
+
+      setMessage("Sucursal actualizada correctamente.");
+      return;
+    }
+
+    const { data: lastBranch, error: branchNumberError } =
+      await supabase
+        .from("merchant_branches")
+        .select("branch_number")
+        .eq("merchant_id", editingId)
+        .order("branch_number", {
+          ascending: false,
+        })
+        .limit(1)
+        .maybeSingle();
+
+    if (branchNumberError) {
+      throw new Error(branchNumberError.message);
+    }
+
+    const nextBranchNumber =
+      Number(lastBranch?.branch_number || 0) + 1;
+
+    const { error } = await supabase
+      .from("merchant_branches")
+      .insert({
+        ...branchPayload,
+        branch_number: nextBranchNumber,
+      });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    await loadMerchantBranches(editingId);
+
+    setShowBranchModal(false);
+    setEditingBranchId(null);
+    setBranchForm(emptyBranchForm);
+
+    setShowAddAnotherBranchModal(true);
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : "No se pudo guardar la sucursal.";
+
+    console.error(error);
+    setMessage(`Error: ${errorMessage}`);
+  } finally {
+    setSavingBranch(false);
+  }
+};
+
+  const handleEdit = async (merchant: Merchant) => {
     setEditingId(merchant.id);
     setSavedMerchantId(merchant.id);
     setMessage("");
@@ -1232,7 +1448,7 @@ const refreshMerchantDocumentation = async (
         : merchant.vendor_id || "",
     });
 
-    observations: merchant.observations || "",
+    await loadMerchantBranches(merchant.id);
 
     window.scrollTo({
       top: 0,
@@ -1446,6 +1662,285 @@ const confirmDelete = async () => {
                   <input type="text" className={inputClass} value={formData.zone} onChange={(event) => handleChange("zone", event.target.value)} placeholder="Ej: Salta Centro" />
                 </Field>
               </div>
+              {/* SUCURSALES */}
+              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-950">
+                      Sucursales
+                    </p>
+
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Registrá las ubicaciones adicionales que pertenecen
+                      a este mismo comercio.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingBranchId(null);
+                      setBranchForm(emptyBranchForm);
+                      setShowBranchModal(true);
+                    }}
+                    disabled={!editingId}
+                    className="w-full rounded-lg bg-[#1E3A5F] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                  >
+                    + Agregar sucursal
+                  </button>
+                </div>
+
+                {!editingId ? (
+                  <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+                    Guardá primero el comercio para poder registrar sus sucursales.
+                  </p>
+                ) : branches.length === 0 ? (
+                  <p className="mt-4 rounded-lg border border-dashed border-slate-300 bg-white px-3 py-4 text-center text-xs text-slate-500">
+                    No hay sucursales registradas.
+                  </p>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {branches.map((branch) => (
+                      <div
+                        key={branch.id}
+                        className="rounded-xl border border-slate-200 bg-white p-4"
+                      >
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="font-semibold text-slate-950">
+                              Sucursal {branch.branch_number}
+                            </p>
+
+                            <p className="mt-1 text-sm text-slate-600">
+                              {[
+                                [branch.street, branch.street_number]
+                                  .filter(Boolean)
+                                  .join(" "),
+                                branch.city,
+                                branch.province,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ") || "Sin dirección"}
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-500">
+                              CPA: {branch.postal_code || "-"} · Zona:{" "}
+                              {branch.zone || "-"}
+                            </p>
+                          </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingBranchId(branch.id);
+
+                              setBranchForm({
+                                street: branch.street || "",
+                                street_number:
+                                  branch.street_number || "",
+                                floor: branch.floor || "",
+                                apartment: branch.apartment || "",
+                                postal_code:
+                                  branch.postal_code || "",
+                                city: branch.city || "",
+                                province: branch.province || "",
+                                zone: branch.zone || "",
+                              });
+
+                              setShowBranchModal(true);
+                            }}
+                            className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-medium text-blue-700 hover:bg-blue-50"
+                          >
+                            Editar
+                          </button>
+                            <button
+                          type="button"
+                          onClick={() => setBranchToDelete(branch)}
+                          className="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50"
+                          >
+                          Eliminar
+                          </button>
+                        </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {showBranchModal && editingId && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/50 p-4">
+                  <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+                    <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+                      <div>
+                        <h3 className="text-lg font-semibold text-slate-950">
+                          {editingBranchId
+                            ? "Editar sucursal"
+                            : "Agregar sucursal"}
+                        </h3>
+
+                        <p className="mt-1 text-sm text-slate-500">
+                          Los datos fiscales y el nombre de fantasía se heredan del comercio principal.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowBranchModal(false)}
+                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50"
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    <div className="grid gap-4 p-6 md:grid-cols-2">
+                      <Field label="Calle">
+                        <input
+                          type="text"
+                          className={inputClass}
+                          value={branchForm.street}
+                          onChange={(event) =>
+                            setBranchForm((prev) => ({
+                              ...prev,
+                              street: event.target.value,
+                            }))
+                          }
+                        />
+                      </Field>
+
+                      <Field label="Número">
+                        <input
+                          type="text"
+                          className={inputClass}
+                          value={branchForm.street_number}
+                          onChange={(event) =>
+                            setBranchForm((prev) => ({
+                              ...prev,
+                              street_number: event.target.value,
+                            }))
+                          }
+                        />
+                      </Field>
+
+                      <Field label="Piso">
+                        <input
+                          type="text"
+                          className={inputClass}
+                          value={branchForm.floor}
+                          onChange={(event) =>
+                            setBranchForm((prev) => ({
+                              ...prev,
+                              floor: event.target.value,
+                            }))
+                          }
+                          placeholder="Ej: 2"
+                        />
+                      </Field>
+
+                      <Field label="Departamento">
+                        <input
+                          type="text"
+                          className={inputClass}
+                          value={branchForm.apartment}
+                          onChange={(event) =>
+                            setBranchForm((prev) => ({
+                              ...prev,
+                              apartment: event.target.value,
+                            }))
+                          }
+                          placeholder="Ej: B"
+                        />
+                      </Field>
+
+                      <Field label="Código postal (CPA)">
+                        <input
+                          type="text"
+                          className={inputClass}
+                          value={branchForm.postal_code}
+                          onChange={(event) =>
+                            setBranchForm((prev) => ({
+                              ...prev,
+                              postal_code: event.target.value,
+                            }))
+                          }
+                        />
+                      </Field>
+
+                      <Field label="Localidad">
+                        <input
+                          type="text"
+                          className={inputClass}
+                          value={branchForm.city}
+                          onChange={(event) =>
+                            setBranchForm((prev) => ({
+                              ...prev,
+                              city: event.target.value,
+                            }))
+                          }
+                        />
+                      </Field>
+
+                      <Field label="Provincia">
+                        <select
+                          className={inputClass}
+                          value={branchForm.province}
+                          onChange={(event) =>
+                            setBranchForm((prev) => ({
+                              ...prev,
+                              province: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Seleccionar provincia</option>
+                          <option value="Salta">Salta</option>
+                          <option value="Jujuy">Jujuy</option>
+                          <option value="Tucumán">Tucumán</option>
+                          <option value="Catamarca">Catamarca</option>
+                          <option value="Santiago del Estero">Santiago del Estero</option>
+                          <option value="Córdoba">Córdoba</option>
+                          <option value="Buenos Aires">Buenos Aires</option>
+                          <option value="Ciudad Autónoma de Buenos Aires">
+                            Ciudad Autónoma de Buenos Aires
+                          </option>
+                        </select>
+                      </Field>
+
+                      <Field label="Zona">
+                        <input
+                          type="text"
+                          className={inputClass}
+                          value={branchForm.zone}
+                          onChange={(event) =>
+                            setBranchForm((prev) => ({
+                              ...prev,
+                              zone: event.target.value,
+                            }))
+                          }
+                          placeholder="Ej: Salta Centro"
+                        />
+                      </Field>
+                    </div>
+
+                    <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowBranchModal(false)}
+                        className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        Cancelar
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleSaveBranch}
+                        disabled={savingBranch}
+                        className="rounded-lg bg-[#1E3A5F] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                      >
+                        {savingBranch ? "Guardando..." : "Guardar sucursal"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </FormSection>
 
             {/* DATOS LEGALES */}
@@ -2364,6 +2859,92 @@ const confirmDelete = async () => {
                 {loading
                   ? "Guardando..."
                   : "Guardar de todas formas"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showAddAnotherBranchModal && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+            <div className="border-b border-slate-200 px-6 py-5">
+              <h3 className="text-lg font-semibold text-slate-950">
+                Sucursal guardada
+              </h3>
+            </div>
+
+            <div className="px-6 py-5">
+              <p className="text-sm leading-6 text-slate-600">
+                La sucursal se guardó correctamente.
+              </p>
+
+              <p className="mt-2 text-sm font-medium text-slate-900">
+                ¿Querés agregar otra sucursal?
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+              <button
+                type="button"
+                onClick={() =>
+                  setShowAddAnotherBranchModal(false)
+                }
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Finalizar
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddAnotherBranchModal(false);
+                  setEditingBranchId(null);
+                  setBranchForm(emptyBranchForm);
+                  setShowBranchModal(true);
+                }}
+                className="rounded-lg bg-[#1E3A5F] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+              >
+                Agregar otra
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {branchToDelete && (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+            <div className="border-b border-slate-200 px-6 py-5">
+              <h3 className="text-lg font-semibold text-slate-950">
+                Eliminar sucursal
+              </h3>
+            </div>
+
+            <div className="px-6 py-5">
+              <p className="text-sm leading-6 text-slate-600">
+                ¿Querés eliminar la Sucursal{" "}
+                {branchToDelete.branch_number}?
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Esta acción no se puede deshacer.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setBranchToDelete(null)}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={confirmDeleteBranch}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+              >
+                Eliminar sucursal
               </button>
             </div>
           </div>
