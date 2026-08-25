@@ -13,6 +13,18 @@ type PosDevice = {
   status: string | null;
   vendor_id: string | null;
   merchant_id: string | null;
+  merchant_branch_id: string | null;
+};
+
+type MerchantBranch = {
+  id: string;
+  merchant_id: string;
+  branch_number: number;
+  branch_name: string | null;
+  street: string | null;
+  street_number: string | null;
+  city: string | null;
+  province: string | null;
 };
 
 type Vendor = {
@@ -45,6 +57,7 @@ type ActionConfig = {
   movementType: string;
   vendor_id: string | null;
   merchant_id: string | null;
+  merchant_branch_id: string | null;
 };
 
 type PendingAssignment = {
@@ -63,6 +76,7 @@ const initialForm = {
   action: "assign_vendor" as AssignmentAction,
   vendor_id: "",
   merchant_id: "",
+   merchant_branch_id: "",
   notes: "",
 };
 
@@ -78,6 +92,9 @@ export default function AsignacionesPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingAssignment, setPendingAssignment] =
     useState<PendingAssignment | null>(null);
+  
+  const [branches, setBranches] =
+  useState<MerchantBranch[]>([]);
 
   const [notification, setNotification] =
     useState<NotificationMessage | null>(null);
@@ -120,12 +137,19 @@ export default function AsignacionesPage() {
     }
   };
 
-  const loadData = async () => {
-    const [posRes, vendorsRes, merchantsRes] = await Promise.all([
+      const loadData = async () => {
+      const [
+        posRes,
+        vendorsRes,
+        merchantsRes,
+        branchesRes,
+      ] = await Promise.all([
       supabase
         .from("pos_devices")
-        .select("id, code, status, vendor_id, merchant_id")
-        .order("code"),
+        .select(
+          "id, code, status, vendor_id, merchant_id, merchant_branch_id"
+        )
+                .order("code"),
 
       supabase
         .from("vendors")
@@ -137,6 +161,19 @@ export default function AsignacionesPage() {
         .from("merchants")
         .select("id, name, vendor_id")
         .order("name"),
+          supabase
+      .from("merchant_branches")
+      .select(`
+        id,
+        merchant_id,
+        branch_number,
+        branch_name,
+        street,
+        street_number,
+        city,
+        province
+      `)
+      .order("branch_number"),
     ]);
 
     if (posRes.error) {
@@ -169,6 +206,9 @@ export default function AsignacionesPage() {
     setPosDevices((posRes.data as PosDevice[]) || []);
     setVendors((vendorsRes.data as Vendor[]) || []);
     setMerchants((merchantsRes.data as Merchant[]) || []);
+    setBranches(
+      (branchesRes.data as MerchantBranch[]) || []
+    );
   };
 
   useEffect(() => {
@@ -206,24 +246,31 @@ export default function AsignacionesPage() {
       const pos = posDevices.find((item) => item.id === value);
 
       setFormData((previous) => ({
-        ...previous,
-        pos_id: value,
-        vendor_id: pos?.vendor_id ?? "",
-        merchant_id: pos?.merchant_id ?? "",
+      ...previous,
+      pos_id: value,
+      vendor_id: pos?.vendor_id ?? "",
+      merchant_id: pos?.merchant_id ?? "",
+      merchant_branch_id:
+        pos?.merchant_branch_id ?? "",
       }));
       return;
     }
 
     if (field === "merchant_id") {
+      const [merchantId, branchId = ""] =
+        value.split("|");
+
       const selectedMerchant = merchants.find(
-        (merchant) => merchant.id === value
+        (merchant) => merchant.id === merchantId
       );
 
       setFormData((previous) => ({
         ...previous,
-        merchant_id: value,
+        merchant_id: merchantId,
+        merchant_branch_id: branchId,
         vendor_id: selectedMerchant?.vendor_id ?? "",
       }));
+
       return;
     }
 
@@ -317,6 +364,7 @@ export default function AsignacionesPage() {
           movementType: "asignado_vendedor",
           vendor_id: formData.vendor_id || null,
           merchant_id: null,
+          merchant_branch_id: null,
         };
 
       case "assign_merchant":
@@ -325,6 +373,8 @@ export default function AsignacionesPage() {
           movementType: "asignado_comercio",
           vendor_id: formData.vendor_id || null,
           merchant_id: formData.merchant_id || null,
+          merchant_branch_id:
+           formData.merchant_branch_id || null,
         };
 
       case "return_stock":
@@ -333,6 +383,7 @@ export default function AsignacionesPage() {
           movementType: "retorno_stock",
           vendor_id: null,
           merchant_id: null,
+          merchant_branch_id: null,
         };
 
       case "maintenance":
@@ -341,6 +392,8 @@ export default function AsignacionesPage() {
           movementType: "mantenimiento",
           vendor_id: selectedPos?.vendor_id || null,
           merchant_id: selectedPos?.merchant_id || null,
+          merchant_branch_id:
+            selectedPos?.merchant_branch_id || null,
         };
 
       default:
@@ -493,6 +546,8 @@ export default function AsignacionesPage() {
           status: assignment.config.posStatus,
           vendor_id: assignment.config.vendor_id,
           merchant_id: assignment.config.merchant_id,
+          merchant_branch_id:
+            assignment.config.merchant_branch_id,
         })
         .eq("id", assignment.posId);
 
@@ -516,6 +571,19 @@ export default function AsignacionesPage() {
             vendor_name: assignment.vendorName,
             merchant_id: assignment.config.merchant_id,
             merchant_name: assignment.merchantName,
+            merchant_branch_id:
+              assignment.config.merchant_branch_id,
+
+            merchant_branch_name:
+              assignment.config.merchant_branch_id
+                ? `Sucursal ${
+                    branches.find(
+                      (branch) =>
+                        branch.id ===
+                        assignment.config.merchant_branch_id
+                    )?.branch_number || ""
+                  }`
+                : null,
             user_id: auditUser?.id || null,
             user_name: auditUser?.name || null,
             user_email: auditUser?.email || null,
@@ -735,7 +803,13 @@ export default function AsignacionesPage() {
                 <select
                   id="merchant_id"
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                  value={formData.merchant_id}
+                  value={
+                    formData.merchant_id
+                      ? `${formData.merchant_id}|${
+                          formData.merchant_branch_id || ""
+                        }`
+                      : ""
+                  }
                   onChange={(event) =>
                     handleChange("merchant_id", event.target.value)
                   }
@@ -743,11 +817,44 @@ export default function AsignacionesPage() {
                 >
                   <option value="">Seleccionar comercio</option>
 
-                  {merchants.map((merchant) => (
-                    <option key={merchant.id} value={merchant.id}>
-                      {merchant.name || "Sin nombre"}
-                    </option>
-                  ))}
+                  {merchants.flatMap((merchant) => {
+                    const merchantBranches = branches.filter(
+                      (branch) =>
+                        branch.merchant_id === merchant.id
+                    );
+
+                    const options = [
+                      <option
+                        key={`${merchant.id}-main`}
+                        value={`${merchant.id}|`}
+                      >
+                        {merchant.name || "Sin nombre"} — Comercio principal
+                      </option>,
+                    ];
+
+                    merchantBranches.forEach((branch) => {
+                      const address = [
+                        branch.street,
+                        branch.street_number,
+                      ]
+                        .filter(Boolean)
+                        .join(" ");
+
+                      options.push(
+                        <option
+                          key={branch.id}
+                          value={`${merchant.id}|${branch.id}`}
+                        >
+                          {merchant.name || "Sin nombre"} —{" "}
+                          {branch.branch_name ||
+                            `Sucursal ${branch.branch_number}`}
+                          {address ? ` · ${address}` : ""}
+                        </option>
+                      );
+                    });
+
+                    return options;
+                  })}
                 </select>
 
                 <p className="mt-1.5 text-xs text-slate-500">

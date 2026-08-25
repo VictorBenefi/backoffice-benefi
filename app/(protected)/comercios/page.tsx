@@ -29,6 +29,7 @@ type MerchantBranch = {
   id: string;
   merchant_id: string;
   branch_number: number;
+  branch_name: string | null;
 
   street: string | null;
   street_number: string | null;
@@ -44,6 +45,7 @@ type MerchantBranch = {
 };
 
 type BranchFormData = {
+  branch_name: string;
   street: string;
   street_number: string;
   floor: string;
@@ -165,6 +167,7 @@ observations: string;
 };
 
 const emptyBranchForm: BranchFormData = {
+  branch_name: "",
   street: "",
   street_number: "",
   floor: "",
@@ -1291,6 +1294,7 @@ const confirmDeleteBranch = async () => {
   try {
     const branchPayload = {
       merchant_id: editingId,
+      branch_name: nullableText(branchForm.branch_name),
       street: nullableText(branchForm.street),
       street_number: nullableText(branchForm.street_number),
       floor: nullableText(branchForm.floor),
@@ -1708,7 +1712,8 @@ const confirmDelete = async () => {
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div>
                             <p className="font-semibold text-slate-950">
-                              Sucursal {branch.branch_number}
+                              {branch.branch_name ||
+                                `Sucursal ${branch.branch_number}`}
                             </p>
 
                             <p className="mt-1 text-sm text-slate-600">
@@ -1735,6 +1740,7 @@ const confirmDelete = async () => {
                               setEditingBranchId(branch.id);
 
                               setBranchForm({
+                                branch_name: branch.branch_name || "",
                                 street: branch.street || "",
                                 street_number:
                                   branch.street_number || "",
@@ -1793,6 +1799,25 @@ const confirmDelete = async () => {
                     </div>
 
                     <div className="grid gap-4 p-6 md:grid-cols-2">
+
+                      <Field
+                        label="Nombre de la sucursal"
+                        required
+                        className="md:col-span-2"
+                      >
+                        <input
+                          type="text"
+                          className={inputClass}
+                          value={branchForm.branch_name}
+                          onChange={(event) =>
+                            setBranchForm((prev) => ({
+                              ...prev,
+                              branch_name: event.target.value,
+                            }))
+                          }
+                          placeholder="Ej: Sucursal Belgrano"
+                        />
+                      </Field>
                       <Field label="Calle">
                         <input
                           type="text"
