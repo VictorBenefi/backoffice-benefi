@@ -26,7 +26,10 @@ type MentaTransaction = {
   merchant_additional_info?: unknown;
   operation_additional_info?: unknown;
   operation_detail?: unknown;
-  tax_info?: unknown;
+  tax_info?: {
+  payment_date?: string | null;
+  net_amount?: number | string | null;
+} | null;
   user_info?: unknown;
 
   [key: string]: unknown;
@@ -305,6 +308,18 @@ export async function POST() {
             transaction.datetime
               ? String(transaction.datetime)
               : null,
+
+          merchant_payment_date:
+            transaction.tax_info?.payment_date
+              ? String(
+                  transaction.tax_info.payment_date
+                ).slice(0, 10)
+              : null,
+
+          merchant_net_amount:
+            toNumber(
+              transaction.tax_info?.net_amount
+            ),
 
           status:
             transaction.status

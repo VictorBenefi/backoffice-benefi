@@ -55,6 +55,12 @@ export default async function ProtectedLayout({
       label: "Operaciones",
       roles: ["admin", "supervisor", "operaciones"],
     },
+
+    {
+      href: "/liquidaciones",
+      label: "Liquidaciones",
+      roles: ["admin", "supervisor", "operaciones"],
+    },
     
     {
       href: "/asignaciones",
