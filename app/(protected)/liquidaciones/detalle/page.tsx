@@ -14,28 +14,57 @@ type Transaction = {
   id: string;
   pos_id: string | null;
   operation_number: string | null;
+  operation_type: string | null;
   transaction_datetime: string;
   payment_method: string | null;
   installments: number | null;
   gross_amount: number | string | null;
   merchant_net_amount: number | string | null;
+
+  operation_detail?: {
+    card?: {
+      card_brand?: string | null;
+    } | null;
+  } | null;
 };
 
 type Liquidation = {
   merchant_name: string;
+  merchant_cuit: string | null;
+  merchant_address: string | null;
+  merchant_street: string | null;
+  merchant_street_number: string | null;
+  merchant_floor: string | null;
+  merchant_apartment: string | null;
+  merchant_postal_code: string | null;
+  merchant_city: string | null;
+  merchant_province: string | null;
   payment_date: string;
   payer: string;
   channel: string;
+
   operation_count: number;
   pos_count: number;
+
   gross_amount: number;
+
+  merchant_commission: number;
+  merchant_commission_vat: number;
+
+  financial_cost: number;
+  financial_cost_vat: number;
+
+  calculated_net_amount: number;
   merchant_net_amount: number;
+
+  reconciliation_difference: number;
 };
 
 type PosDevice = {
   id: string;
   code: string;
   serial: string | null;
+  merchant_reference: string | null;
 };
 
 function PayerBadge({
@@ -173,16 +202,84 @@ export default function LiquidacionDetallePage() {
   }
 
   function formatDate(
-    value: string
+  value: string
+) {
+  return new Intl.DateTimeFormat(
+    "es-AR"
+  ).format(
+    new Date(
+      `${value}T12:00:00`
+    )
+  );
+}
+function getMerchantAddress(
+  liquidation: Liquidation
+) {
+  const addressParts: string[] = [];
+
+  if (liquidation.merchant_street) {
+    let streetLine =
+      liquidation.merchant_street;
+
+    if (
+      liquidation.merchant_street_number
+    ) {
+      streetLine += ` ${
+        liquidation.merchant_street_number
+      }`;
+    }
+
+    addressParts.push(streetLine);
+  } else if (
+    liquidation.merchant_address
   ) {
-    return new Intl.DateTimeFormat(
-      "es-AR"
-    ).format(
-      new Date(
-        `${value}T12:00:00`
-      )
+    addressParts.push(
+      liquidation.merchant_address
     );
   }
+
+  if (liquidation.merchant_floor) {
+    addressParts.push(
+      `Piso ${liquidation.merchant_floor}`
+    );
+  }
+
+  if (
+    liquidation.merchant_apartment
+  ) {
+    addressParts.push(
+      `Dpto. ${
+        liquidation.merchant_apartment
+      }`
+    );
+  }
+
+  const locationParts = [
+    liquidation.merchant_city,
+    liquidation.merchant_province,
+  ].filter(Boolean);
+
+  if (locationParts.length > 0) {
+    addressParts.push(
+      locationParts.join(", ")
+    );
+  }
+
+  if (
+    liquidation.merchant_postal_code
+  ) {
+    addressParts.push(
+      `CP ${
+        liquidation.merchant_postal_code
+      }`
+    );
+  }
+
+  return (
+    addressParts.join(" · ") ||
+    "-"
+  );
+}
 
 function getPosCode(
   posId: string | null
@@ -199,8 +296,19 @@ function getPosCode(
     return "Sin POS";
   }
 
-  if (pos.serial) {
-    return pos.serial.slice(-5);
+  const serialSuffix = pos.serial
+    ? pos.serial.slice(-5)
+    : "";
+
+  if (
+    pos.merchant_reference &&
+    serialSuffix
+  ) {
+    return `${pos.merchant_reference} / ${serialSuffix}`;
+  }
+
+  if (serialSuffix) {
+    return serialSuffix;
   }
 
   return pos.code || "Sin POS";
@@ -326,6 +434,15 @@ const paymentMethods =
     ).sort();
   }, [transactions]);
 
+  function getCardBrand(
+  transaction: Transaction
+) {
+  return (
+    transaction.operation_detail?.card
+      ?.card_brand || "-"
+  );
+}
+
   function exportExcel() {
   if (!liquidation) {
     return;
@@ -350,19 +467,90 @@ const paymentMethods =
     ],
     
     [
-      "Operaciones",
-      liquidation.operation_count,
-    ],
-    [
-      "Importe bruto",
-      liquidation.gross_amount,
-    ],
-    [
-      "Neto a acreditar",
-      liquidation.merchant_net_amount,
-    ],
+  "Operaciones",
+  liquidation.operation_count,
+],
 
-    ["", ""],
+["", ""],
+["DESGLOSE DE LIQUIDACIÓN", ""],
+
+[
+  "Importe bruto",
+  liquidation.gross_amount,
+],
+[
+  "Comisión BENEFÍ",
+  -Math.abs(
+    toNumber(
+      liquidation.merchant_commission
+    )
+  ),
+],
+[
+  "IVA sobre comisión BENEFÍ",
+  -Math.abs(
+    toNumber(
+      liquidation.merchant_commission_vat
+    )
+  ),
+],
+
+...(Math.abs(
+  toNumber(
+    liquidation.financial_cost
+  )
+) > 0
+  ? [
+      [
+        "Costo financiero",
+        -Math.abs(
+          toNumber(
+            liquidation.financial_cost
+          )
+        ),
+      ],
+    ]
+  : []),
+
+...(Math.abs(
+  toNumber(
+    liquidation.financial_cost_vat
+  )
+) > 0
+  ? [
+      [
+        "IVA sobre costo financiero",
+        -Math.abs(
+          toNumber(
+            liquidation.financial_cost_vat
+          )
+        ),
+      ],
+    ]
+  : []),
+
+[
+  "Neto a acreditar",
+  liquidation.merchant_net_amount,
+],
+
+[
+  "Conciliación",
+  Math.abs(
+    toNumber(
+      liquidation.reconciliation_difference
+    )
+  ) <= 1
+    ? "Conciliada"
+    : "Diferencia",
+],
+
+[
+  "Diferencia de conciliación",
+  liquidation.reconciliation_difference,
+],
+
+["", ""],
 ["ACREDITACIONES", ""],
 [
   "Pagador",
@@ -447,6 +635,9 @@ const paymentMethods =
           transaction.payment_method ||
           "",
 
+        Marca:
+          getCardBrand(transaction),
+
         Cuotas:
           transaction.installments || 1,
 
@@ -468,14 +659,15 @@ const paymentMethods =
     );
 
   operationsSheet["!cols"] = [
-    { wch: 22 },
-    { wch: 12 },
-    { wch: 18 },
-    { wch: 18 },
-    { wch: 10 },
-    { wch: 16 },
-    { wch: 16 },
-  ];
+  { wch: 22 },
+  { wch: 12 },
+  { wch: 18 },
+  { wch: 18 },
+  { wch: 16 },
+  { wch: 10 },
+  { wch: 16 },
+  { wch: 16 },
+];
 
   XLSX.utils.book_append_sheet(
     workbook,
@@ -555,45 +747,80 @@ function exportPDF() {
     38
   );
 
-  // =========================
-  // DATOS DE LIQUIDACIÓN
-  // =========================
+// =========================
+// DATOS DE LIQUIDACIÓN
+// =========================
 
-  doc.setTextColor(40);
-  doc.setFontSize(9);
+doc.setTextColor(40);
+doc.setFontSize(9);
 
-  doc.setFont("helvetica", "bold");
-  doc.text("Comercio", margin, 47);
+doc.setFont("helvetica", "bold");
+doc.text("Comercio", margin, 47);
 
-  doc.setFont(
-    "helvetica",
-    "normal"
+doc.setFont(
+  "helvetica",
+  "normal"
+);
+doc.text(
+  liquidation.merchant_name,
+  margin,
+  52
+);
+
+doc.setFont("helvetica", "bold");
+doc.text("CUIT", margin, 60);
+
+doc.setFont(
+  "helvetica",
+  "normal"
+);
+doc.text(
+  liquidation.merchant_cuit || "-",
+  margin,
+  65
+);
+
+doc.setFont("helvetica", "bold");
+doc.text("Domicilio", margin, 73);
+
+doc.setFont(
+  "helvetica",
+  "normal"
+);
+
+const merchantAddress =
+  getMerchantAddress(liquidation);
+
+const addressLines =
+  doc.splitTextToSize(
+    merchantAddress,
+    115
   );
-  doc.text(
-    liquidation.merchant_name,
-    margin,
-    52
-  );
 
-  doc.setFont("helvetica", "bold");
-  doc.text(
-    "Fecha de pago",
-    75,
-    47
-  );
+doc.text(
+  addressLines,
+  margin,
+  78
+);
 
-  doc.setFont(
-    "helvetica",
-    "normal"
-  );
-  doc.text(
-    formatDate(
-      liquidation.payment_date
-    ),
-    75,
-    52
-  );
+doc.setFont("helvetica", "bold");
+doc.text(
+  "Fecha de pago",
+  150,
+  47
+);
 
+doc.setFont(
+  "helvetica",
+  "normal"
+);
+doc.text(
+  formatDate(
+    liquidation.payment_date
+  ),
+  150,
+  52
+);
 
   // =========================
   // CONSOLIDADO
@@ -605,11 +832,11 @@ function exportPDF() {
   doc.text(
     "CONSOLIDADO",
     margin,
-    66
+    92
   );
 
   autoTable(doc, {
-    startY: 70,
+    startY: 96,
 
     head: [[
       "Operaciones",
@@ -743,6 +970,7 @@ currentY =
   (doc as any).lastAutoTable
     .finalY + 10;
 
+
   // =========================
   // RESUMEN MEDIOS DE PAGO
   // =========================
@@ -818,9 +1046,151 @@ currentY =
     (doc as any).lastAutoTable
       .finalY + 10;
 
- // =========================
+// =========================
+// DESGLOSE DE LIQUIDACIÓN
+// =========================
+
+doc.setFont("helvetica", "bold");
+doc.setFontSize(11);
+
+doc.text(
+  "DESGLOSE DE LIQUIDACIÓN",
+  margin,
+  currentY
+);
+
+currentY += 4;
+
+const liquidationBreakdownRows: (
+  | string
+  | number
+)[][] = [
+  [
+    "Importe bruto",
+    formatMoney(
+      liquidation.gross_amount
+    ),
+  ],
+  [
+    "Comisión BENEFÍ",
+    `- ${formatMoney(
+      Math.abs(
+        toNumber(
+          liquidation.merchant_commission
+        )
+      )
+    )}`,
+  ],
+  [
+    "IVA sobre comisión BENEFÍ",
+    `- ${formatMoney(
+      Math.abs(
+        toNumber(
+          liquidation.merchant_commission_vat
+        )
+      )
+    )}`,
+  ],
+];
+
+if (
+  Math.abs(
+    toNumber(
+      liquidation.financial_cost
+    )
+  ) > 0
+) {
+  liquidationBreakdownRows.push([
+    "Costo financiero",
+    `- ${formatMoney(
+      Math.abs(
+        toNumber(
+          liquidation.financial_cost
+        )
+      )
+    )}`,
+  ]);
+}
+
+if (
+  Math.abs(
+    toNumber(
+      liquidation.financial_cost_vat
+    )
+  ) > 0
+) {
+  liquidationBreakdownRows.push([
+    "IVA sobre costo financiero",
+    `- ${formatMoney(
+      Math.abs(
+        toNumber(
+          liquidation.financial_cost_vat
+        )
+      )
+    )}`,
+  ]);
+}
+
+liquidationBreakdownRows.push([
+  "Neto a acreditar",
+  formatMoney(
+    liquidation.merchant_net_amount
+  ),
+]);
+
+liquidationBreakdownRows.push([
+  "Conciliación",
+  Math.abs(
+    toNumber(
+      liquidation.reconciliation_difference
+    )
+  ) <= 1
+    ? "Conciliada"
+    : `Diferencia: ${formatMoney(
+        liquidation.reconciliation_difference
+      )}`,
+]);
+
+autoTable(doc, {
+  startY: currentY,
+
+  body: liquidationBreakdownRows,
+
+  theme: "grid",
+
+  styles: {
+    fontSize: 8.5,
+    cellPadding: 2.5,
+  },
+
+  columnStyles: {
+    0: {
+      fontStyle: "normal",
+    },
+    1: {
+      halign: "right",
+      fontStyle: "bold",
+    },
+  },
+
+  margin: {
+    left: margin,
+    right: margin,
+  },
+});
+
+currentY =
+  (doc as any).lastAutoTable
+    .finalY + 10;
+
+// =========================
 // DETALLE DE OPERACIONES
 // =========================
+
+// El detalle siempre comienza
+// en una página nueva
+doc.addPage();
+currentY = 20;
 
 doc.setFont("helvetica", "bold");
 doc.setFontSize(11);
@@ -944,6 +1314,8 @@ orderedMethods.forEach(
         "Fecha",
         "POS",
         "Operación",
+        "Tipo",
+        "Marca",
         "Cuotas",
         "Bruto",
         "Neto",
@@ -972,6 +1344,20 @@ orderedMethods.forEach(
 
             transaction.operation_number ||
               "-",
+
+            transaction.operation_type ===
+            "PAYMENT"
+              ? "Venta"
+              : transaction.operation_type ===
+                "ANNULMENT"
+              ? "Anulación"
+              : transaction.operation_type ===
+                "REFUND"
+              ? "Devolución"
+              : transaction.operation_type ||
+                "-",
+
+            getCardBrand(transaction),
 
             transaction.installments ||
               1,
@@ -1010,27 +1396,50 @@ orderedMethods.forEach(
 
       columnStyles: {
         0: {
-          cellWidth: 32,
+          cellWidth: 28,
         },
         1: {
-          cellWidth: 20,
+          cellWidth: 16,
         },
         2: {
-          cellWidth: 37,
+          cellWidth: 27,
         },
         3: {
-          cellWidth: 18,
-          halign: "center",
+          cellWidth: 21,
         },
         4: {
-          cellWidth: 35,
-          halign: "right",
+          cellWidth: 24,
         },
         5: {
-          cellWidth: 35,
+          cellWidth: 14,
+          halign: "center",
+        },
+        6: {
+          cellWidth: 25,
+          halign: "right",
+        },
+        7: {
+          cellWidth: 25,
           halign: "right",
           fontStyle: "bold",
         },
+      },
+
+      didParseCell: (data) => {
+        if (
+          data.section === "head" &&
+          (data.column.index === 6 ||
+            data.column.index === 7)
+        ) {
+          data.cell.styles.halign = "right";
+        }
+
+        if (
+          data.section === "head" &&
+          data.column.index === 5
+        ) {
+          data.cell.styles.halign = "center";
+        }
       },
 
       margin: {
@@ -1272,18 +1681,130 @@ const accreditationSummary =
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-4">
-  <div className="text-sm text-slate-500">
-    Neto a acreditar
-  </div>
+          <div className="text-sm text-slate-500">
+            Neto a acreditar
+          </div>
 
-  <div className="mt-1 text-xl font-bold text-slate-950">
-    {formatMoney(
-      liquidation.merchant_net_amount
-    )}
-  </div>
-</div>
+          <div className="mt-1 text-xl font-bold text-slate-950">
+            {formatMoney(
+              liquidation.merchant_net_amount
+            )}
+          </div>
+        </div>
 
-</div>
+        </div>
+        {/* DESGLOSE DE LIQUIDACIÓN */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <div className="mb-4">
+            <h2 className="font-semibold text-slate-950">
+              Desglose de liquidación
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Detalle de los conceptos aplicados para
+              determinar el importe neto a acreditar.
+            </p>
+          </div>
+
+          <div className="divide-y divide-slate-100">
+            <LiquidationConcept
+              label="Importe bruto"
+              value={liquidation.gross_amount}
+            />
+
+            <LiquidationConcept
+              label="Comisión BENEFÍ"
+              value={liquidation.merchant_commission}
+              negative
+            />
+
+            <LiquidationConcept
+              label="IVA sobre comisión BENEFÍ"
+              value={
+                liquidation.merchant_commission_vat
+              }
+              negative
+            />
+
+            {Math.abs(
+              toNumber(liquidation.financial_cost)
+            ) > 0 && (
+              <LiquidationConcept
+                label="Costo financiero"
+                value={liquidation.financial_cost}
+                negative
+              />
+            )}
+
+            {Math.abs(
+              toNumber(
+                liquidation.financial_cost_vat
+              )
+            ) > 0 && (
+              <LiquidationConcept
+                label="IVA sobre costo financiero"
+                value={
+                  liquidation.financial_cost_vat
+                }
+                negative
+              />
+            )}
+
+            <div className="flex items-center justify-between gap-4 pt-4">
+              <div>
+                <p className="font-semibold text-slate-950">
+                  Neto a acreditar
+                </p>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Importe informado por MENTA
+                </p>
+              </div>
+
+              <p className="text-xl font-bold text-slate-950">
+                {formatMoney(
+                  liquidation.merchant_net_amount
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            {Math.abs(
+              toNumber(
+                liquidation.reconciliation_difference
+              )
+            ) <= 1 ? (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-slate-500">
+                  Conciliación
+                </span>
+
+                <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                  Conciliada
+                </span>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="text-sm text-slate-500">
+                  Diferencia de conciliación
+                </span>
+
+                <div className="flex items-center gap-3">
+                  <span className="font-semibold text-amber-700">
+                    {formatMoney(
+                      liquidation.reconciliation_difference
+                    )}
+                  </span>
+
+                  <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                    Diferencia
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
 
 {/* ACREDITACIONES */}
 <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -1538,6 +2059,10 @@ const accreditationSummary =
                   Medio
                 </th>
 
+                <th className="px-4 py-3 text-left">
+                  Marca
+                </th>
+
                 <th className="px-4 py-3 text-right">
                   Cuotas
                 </th>
@@ -1591,6 +2116,10 @@ const accreditationSummary =
                         "-"}
                     </td>
 
+                    <td className="px-4 py-3">
+                      {getCardBrand(transaction)}
+                    </td>
+
                     <td className="px-4 py-3 text-right">
                       {transaction.installments ||
                         1}
@@ -1614,6 +2143,41 @@ const accreditationSummary =
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+function LiquidationConcept({
+  label,
+  value,
+  negative = false,
+}: {
+  label: string;
+  value: number | string | null;
+  negative?: boolean;
+}) {
+  const amount = Number(value || 0);
+
+  return (
+    <div className="flex items-center justify-between gap-4 py-3">
+      <span className="text-sm text-slate-600">
+        {label}
+      </span>
+
+      <span
+        className={
+          negative
+            ? "font-semibold text-slate-700"
+            : "font-semibold text-slate-950"
+        }
+      >
+        {negative && amount !== 0
+          ? "- "
+          : ""}
+        {new Intl.NumberFormat("es-AR", {
+          style: "currency",
+          currency: "ARS",
+        }).format(Math.abs(amount))}
+      </span>
     </div>
   );
 }

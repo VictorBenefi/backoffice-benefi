@@ -34,6 +34,7 @@ type Merchant = {
 type PosDevice = {
   id: string;
   code: string | null;
+  merchant_reference: string | null;
   brand: string | null;
   model: string | null;
   serial: string | null;
@@ -55,6 +56,7 @@ type Installation = {
 
 const initialForm = {
   code: "",
+  merchant_reference: "",
   brand: "",
   model: "",
   serial: "",
@@ -207,7 +209,7 @@ export default function PosClient({
       let query = supabase
         .from("pos_devices")
         .select(
-          "id, code, brand, model, serial, imei, imei_2, status, vendor_id, merchant_id, created_at"
+        "id, code, merchant_reference, brand, model, serial, imei, imei_2, status, vendor_id, merchant_id, created_at"
         )
         .order("created_at", { ascending: false });
 
@@ -235,7 +237,7 @@ export default function PosClient({
     const { data, error } = await supabase
       .from("pos_devices")
       .select(
-        "id, code, brand, model, serial, imei, imei_2, status, vendor_id, merchant_id, created_at"
+      "id, code, merchant_reference, brand, model, serial, imei, imei_2, status, vendor_id, merchant_id, created_at"
       )
       .order("created_at", { ascending: false });
 
@@ -295,6 +297,19 @@ export default function PosClient({
 
   const normalize = (value: string | null | undefined) =>
     (value || "").trim().toLowerCase();
+
+  const getPosDisplay = (
+  merchantReference: string | null,
+  serial: string | null
+) => {
+  const serialSuffix = serial
+    ? serial.slice(-5)
+    : "-";
+
+  return merchantReference
+    ? `${merchantReference} / ${serialSuffix}`
+    : serialSuffix;
+};
 
   const validateForm = () => {
     if (!formData.code.trim()) {
@@ -487,6 +502,8 @@ export default function PosClient({
     setEditingId(pos.id);
     setFormData({
       code: pos.code || "",
+      merchant_reference:
+        pos.merchant_reference || "",
       brand: pos.brand || "",
       model: pos.model || "",
       serial: pos.serial || "",
@@ -572,6 +589,8 @@ export default function PosClient({
           .from("pos_devices")
           .update({
             code: formData.code.trim(),
+             merchant_reference:
+              formData.merchant_reference.trim() || null,
             brand: formData.brand.trim(),
             model: formData.model.trim(),
             serial: formData.serial.trim(),
@@ -597,6 +616,8 @@ export default function PosClient({
       const { error } = await supabase.from("pos_devices").insert([
         {
           code: formData.code.trim(),
+          merchant_reference:
+            formData.merchant_reference.trim() || null,
           brand: formData.brand.trim(),
           model: formData.model.trim(),
           serial: formData.serial.trim(),
@@ -643,6 +664,9 @@ export default function PosClient({
       return (
         !searchText ||
         (pos.code || "").toLowerCase().includes(searchText) ||
+        (pos.merchant_reference || "")
+        .toLowerCase()
+        .includes(searchText) ||
         (pos.brand || "").toLowerCase().includes(searchText) ||
         (pos.model || "").toLowerCase().includes(searchText) ||
         (pos.serial || "").toLowerCase().includes(searchText) ||
@@ -666,6 +690,7 @@ export default function PosClient({
 
       return {
         Codigo: pos.code || "",
+        Referencia: pos.merchant_reference || "",
         Marca: pos.brand || "",
         Modelo: pos.model || "",
         Serial: pos.serial || "",
@@ -790,6 +815,29 @@ export default function PosClient({
                     placeholder="Ej: POS-001"
                     disabled={loading}
                   />
+                </div>
+
+                <div>
+                  <label className={labelClassName}>
+                    Referencia comercio
+                  </label>
+                  <input
+                    type="text"
+                    className={fieldClassName}
+                    value={formData.merchant_reference}
+                    onChange={(event) =>
+                      handleChange(
+                        "merchant_reference",
+                        event.target.value
+                      )
+                    }
+                    placeholder="Ej: Playa1, Playa2, Spot"
+                    disabled={loading}
+                  />
+                  <p className="mt-1 text-xs text-slate-500">
+                    Opcional. Se utilizará para identificar fácilmente
+                    el POS en operaciones y liquidaciones.
+                  </p>
                 </div>
 
                 <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
@@ -946,6 +994,12 @@ export default function PosClient({
                               <p className="text-base font-bold text-slate-900">
                                 {pos.code || "-"}
                               </p>
+                              <p className="mt-1 text-xs font-medium text-slate-500">
+                                {getPosDisplay(
+                                  pos.merchant_reference,
+                                  pos.serial
+                                )}
+                              </p>
                               <p className="mt-1 text-sm text-slate-600">
                                 {[pos.brand, pos.model]
                                   .filter(Boolean)
@@ -1045,6 +1099,13 @@ export default function PosClient({
                               <td className="px-4 py-4">
                                 <p className="font-semibold text-slate-900">
                                   {pos.code || "-"}
+                                </p>
+
+                                <p className="mt-1 text-xs font-medium text-slate-500">
+                                  {getPosDisplay(
+                                    pos.merchant_reference,
+                                    pos.serial
+                                  )}
                                 </p>
                               </td>
 

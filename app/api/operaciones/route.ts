@@ -78,7 +78,7 @@ export async function GET() {
       supabase
         .from("pos_devices")
         .select(
-            "id, code, serial, merchant_id, merchant_branch_id"
+          "id, code, serial, merchant_reference, merchant_id, merchant_branch_id"
         )
         .order("code", {
             ascending: true,

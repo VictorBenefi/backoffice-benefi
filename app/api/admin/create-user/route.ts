@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdminApi } from "@/lib/require-admin-api";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -27,12 +28,32 @@ const allowedRoles = [
 
 export async function POST(req: Request) {
   try {
+    const admin =
+      await requireAdminApi();
+
+    if (!admin) {
+      return NextResponse.json(
+        {
+          error: "No autorizado.",
+        },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
 
     const name = String(body.name || "").trim();
-    const email = String(body.email || "").trim().toLowerCase();
-    const password = String(body.password || "");
-    const role = String(body.role || "").trim();
+    const email = String(body.email || "")
+      .trim()
+      .toLowerCase();
+
+    const password = String(
+      body.password || ""
+    );
+
+    const role = String(
+      body.role || ""
+    ).trim();
 
     if (!name) {
       return NextResponse.json(
@@ -50,7 +71,10 @@ export async function POST(req: Request) {
 
     if (!password || password.length < 6) {
       return NextResponse.json(
-        { error: "La contraseña debe tener al menos 6 caracteres." },
+        {
+          error:
+            "La contraseña debe tener al menos 6 caracteres.",
+        },
         { status: 400 }
       );
     }

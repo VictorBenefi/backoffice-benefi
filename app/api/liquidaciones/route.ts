@@ -41,7 +41,13 @@ export async function GET() {
         pos_count,
         pos_codes,
         gross_amount,
-        merchant_net_amount
+        merchant_commission,
+        merchant_commission_vat,
+        financial_cost,
+        financial_cost_vat,
+        calculated_net_amount,
+        merchant_net_amount,
+        reconciliation_difference
         `)
         .order("merchant_payment_date", {
           ascending: false,

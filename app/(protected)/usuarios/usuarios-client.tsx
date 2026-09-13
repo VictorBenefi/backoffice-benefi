@@ -13,6 +13,28 @@ type AppUser = {
   is_active: boolean | null;
 };
 
+type MerchantOption = {
+  id: string;
+  name: string;
+};
+
+type BranchOption = {
+  id: string;
+  name: string;
+  merchant_id: string;
+  merchant_name: string;
+};
+
+type BrandOption = {
+  id: string;
+  name: string;
+};
+
+type GroupOption = {
+  id: string;
+  name: string;
+};
+
 const initialForm = {
   name: "",
   email: "",
@@ -42,7 +64,34 @@ export default function UsuariosClient() {
   const [creating, setCreating] = useState(false);
 
   const [formData, setFormData] =
-    useState(initialForm);
+  useState(initialForm);
+
+  const [userType, setUserType] =
+    useState<"backoffice" | "merchant">(
+      "backoffice"
+    );
+
+  const [
+  merchantAccessLevel,
+  setMerchantAccessLevel,
+] = useState<
+  "branch" | "merchant" | "brand" | "group"
+>("merchant");
+
+  const [merchantOptions, setMerchantOptions] =
+  useState<MerchantOption[]>([]);
+
+  const [branchOptions, setBranchOptions] =
+  useState<BranchOption[]>([]);
+
+  const [brandOptions, setBrandOptions] =
+    useState<BrandOption[]>([]);
+
+  const [groupOptions, setGroupOptions] =
+    useState<GroupOption[]>([]);
+
+  const [merchantAccessId, setMerchantAccessId] =
+    useState("");
 
   const [showPassword, setShowPassword] =
     useState(false);
@@ -78,8 +127,9 @@ export default function UsuariosClient() {
   ] = useState(false);
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+  fetchUsers();
+  fetchMerchantAccessOptions();
+}, []);
 
   async function fetchUsers() {
     setLoading(true);
@@ -102,6 +152,65 @@ export default function UsuariosClient() {
     setUsers((data as AppUser[]) || []);
     setLoading(false);
   }
+
+async function fetchMerchantAccessOptions() {
+  try {
+    const response = await fetch(
+      "/api/admin/merchant-access-options",
+      {
+        method: "GET",
+        cache: "no-store",
+      }
+    );
+
+    const data = await response
+      .json()
+      .catch(() => null);
+
+    if (!response.ok || !data?.ok) {
+      toast.error(
+        data?.error ||
+          "No se pudieron cargar los comercios, marcas y grupos."
+      );
+
+      setMerchantOptions([]);
+      setBrandOptions([]);
+      setGroupOptions([]);
+
+      return;
+    }
+
+    setMerchantOptions(
+      data.merchants || []
+    );
+
+    setBranchOptions(
+      data.branches || []
+    );
+
+    setBrandOptions(
+      data.brands || []
+    );
+
+    setGroupOptions(
+      data.groups || []
+    );
+  } catch (error) {
+    console.error(
+      "Error cargando opciones del Portal Comercio:",
+      error
+    );
+
+    toast.error(
+      "No se pudieron cargar los comercios, marcas y grupos."
+    );
+
+    setMerchantOptions([]);
+    setBranchOptions([]);
+    setBrandOptions([]);
+    setGroupOptions([]);
+  }
+}
 
   async function toggleActive(user: AppUser) {
     const nextValue = !user.is_active;
@@ -299,24 +408,72 @@ export default function UsuariosClient() {
       return;
     }
 
-    setCreating(true);
+if (
+  userType === "merchant" &&
+  !merchantAccessId
+) {
+  toast.warning(
+    merchantAccessLevel === "branch"
+      ? "Debés seleccionar una sucursal."
+      : merchantAccessLevel === "merchant"
+        ? "Debés seleccionar un comercio."
+        : merchantAccessLevel === "brand"
+          ? "Debés seleccionar una marca."
+          : "Debés seleccionar un grupo."
+  );
 
-    try {
-      const response = await fetch(
-        "/api/admin/create-user",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name,
-            email,
-            password: formData.password,
-            role: formData.role,
-          }),
+  return;
+}
+
+setCreating(true);
+
+try {
+  const endpoint =
+    userType === "merchant"
+      ? "/api/admin/create-merchant-user"
+      : "/api/admin/create-user";
+
+  const requestBody =
+    userType === "merchant"
+      ? {
+          name,
+          email,
+          password: formData.password,
+          accessLevel:
+            merchantAccessLevel,
+          accessId:
+            merchantAccessId,
+          accessRole:
+            merchantAccessLevel ===
+              "branch" ||
+            merchantAccessLevel ===
+              "merchant"
+              ? "local_admin"
+              : merchantAccessLevel ===
+                  "brand"
+                ? "brand_admin"
+                : "group_admin",
         }
-      );
+      : {
+          name,
+          email,
+          password: formData.password,
+          role: formData.role,
+        };
+
+  const response = await fetch(
+    endpoint,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+      body: JSON.stringify(
+        requestBody
+      ),
+    }
+  );
 
       const result = await response
         .json()
@@ -335,6 +492,10 @@ export default function UsuariosClient() {
       );
 
       setFormData(initialForm);
+      setMerchantAccessLevel(
+        "merchant"
+      );
+      setMerchantAccessId("");
       setShowPassword(false);
 
       await fetchUsers();
@@ -575,49 +736,242 @@ export default function UsuariosClient() {
 
               <FormSection
                 number="3"
-                title="Permisos"
-                description="Seleccioná el nivel de acceso que tendrá el usuario."
+                title="Tipo de usuario y permisos"
+                description="Definí dónde podrá ingresar y qué nivel de acceso tendrá."
                 bordered
               >
-                <Field label="Rol">
-                  <select
-                    className={inputClass}
-                    value={formData.role}
-                    onChange={(event) =>
-                      setFormData(
-                        (previous) => ({
-                          ...previous,
-                          role: event.target.value,
-                        })
-                      )
-                    }
-                    disabled={creating}
-                  >
-                    {roles.map((role) => (
-                      <option
-                        key={role}
-                        value={role}
-                      >
-                        {roleLabel(role)}
-                      </option>
-                    ))}
-                  </select>
+                <Field label="Tipo de usuario">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setUserType("backoffice")
+                      }
+                      disabled={creating}
+                      className={`rounded-xl border p-4 text-left transition ${
+                        userType === "backoffice"
+                          ? "border-blue-500 bg-blue-50 ring-2 ring-blue-500/10"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <p className="font-semibold text-slate-950">
+                        BackOffice
+                      </p>
+
+                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                        Usuario interno de BENEFÍ para
+                        administración y operación.
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setUserType("merchant")
+                      }
+                      disabled={creating}
+                      className={`rounded-xl border p-4 text-left transition ${
+                        userType === "merchant"
+                          ? "border-blue-500 bg-blue-50 ring-2 ring-blue-500/10"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <p className="font-semibold text-slate-950">
+                        Portal Comercio
+                      </p>
+
+                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                        Usuario perteneciente a un
+                        comercio, marca o grupo.
+                      </p>
+                    </button>
+                  </div>
                 </Field>
 
-                <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
-                  <p className="text-sm font-semibold text-blue-950">
-                    Rol seleccionado:{" "}
-                    {roleLabel(formData.role)}
-                  </p>
+                {userType === "backoffice" ? (
+                  <>
+                    <div className="mt-5">
+                      <Field label="Rol">
+                        <select
+                          className={inputClass}
+                          value={formData.role}
+                          onChange={(event) =>
+                            setFormData(
+                              (previous) => ({
+                                ...previous,
+                                role: event.target.value,
+                              })
+                            )
+                          }
+                          disabled={creating}
+                        >
+                          {roles.map((role) => (
+                            <option
+                              key={role}
+                              value={role}
+                            >
+                              {roleLabel(role)}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    </div>
 
-                  <p className="mt-1 text-xs leading-5 text-blue-700">
-                    {roleDescription(
-                      formData.role
-                    )}
-                  </p>
-                </div>
+                    <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                      <p className="text-sm font-semibold text-blue-950">
+                        Rol seleccionado:{" "}
+                        {roleLabel(formData.role)}
+                      </p>
+
+                      <p className="mt-1 text-xs leading-5 text-blue-700">
+                        {roleDescription(
+                          formData.role
+                        )}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="mt-5">
+                      <Field label="Nivel de acceso">
+                        <select
+                          className={inputClass}
+                          value={merchantAccessLevel}
+                          onChange={(event) => {
+                            setMerchantAccessLevel(
+                              event.target.value as
+                                | "branch"
+                                | "merchant"
+                                | "brand"
+                                | "group"
+                            );
+
+                            setMerchantAccessId("");
+                          }}
+                          disabled={creating}
+                        >
+                          <option value="branch">
+                            Sucursal
+                          </option>
+
+                          <option value="merchant">
+                            Comercio
+                          </option>
+
+                          <option value="brand">
+                            Marca
+                          </option>
+
+                          <option value="group">
+                            Grupo / Empresa
+                          </option>
+                        </select>
+                      </Field>
+                    </div>
+
+                    <div className="mt-4">
+                      <Field
+                        label={
+                          merchantAccessLevel === "branch"
+                            ? "Sucursal"
+                            : merchantAccessLevel === "merchant"
+                              ? "Comercio"
+                              : merchantAccessLevel === "brand"
+                                ? "Marca"
+                                : "Grupo / Empresa"
+                        }
+                      >
+                        <select
+                          className={inputClass}
+                          value={merchantAccessId}
+                          onChange={(event) =>
+                            setMerchantAccessId(
+                              event.target.value
+                            )
+                          }
+                          disabled={creating}
+                        >
+                          <option value="">
+                            {merchantAccessLevel === "branch"
+                              ? "Seleccionar sucursal"
+                              : merchantAccessLevel === "merchant"
+                                ? "Seleccionar comercio"
+                                : merchantAccessLevel === "brand"
+                                  ? "Seleccionar marca"
+                                  : "Seleccionar grupo"}
+                          </option>
+
+                          {merchantAccessLevel === "branch" &&
+                            branchOptions.map((branch) => (
+                              <option
+                                key={branch.id}
+                                value={branch.id}
+                              >
+                                {branch.name}
+                                {branch.merchant_name
+                                  ? ` — ${branch.merchant_name}`
+                                  : ""}
+                              </option>
+                            ))}
+
+                          {merchantAccessLevel === "merchant" &&
+                            merchantOptions.map((merchant) => (
+                              <option
+                                key={merchant.id}
+                                value={merchant.id}
+                              >
+                                {merchant.name}
+                              </option>
+                            ))}
+
+                          {merchantAccessLevel === "brand" &&
+                            brandOptions.map((brand) => (
+                              <option
+                                key={brand.id}
+                                value={brand.id}
+                              >
+                                {brand.name}
+                              </option>
+                            ))}
+
+                          {merchantAccessLevel === "group" &&
+                            groupOptions.map((group) => (
+                              <option
+                                key={group.id}
+                                value={group.id}
+                              >
+                                {group.name}
+                              </option>
+                            ))}
+                        </select>
+                      </Field>
+                    </div>
+
+                    <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                      <p className="text-sm font-semibold text-emerald-950">
+                        {merchantAccessLevel === "branch"
+                          ? "Administrador de sucursal"
+                          : merchantAccessLevel === "merchant"
+                            ? "Administrador de comercio"
+                            : merchantAccessLevel === "brand"
+                              ? "Administrador de marca"
+                              : "Super Admin de grupo"}
+                      </p>
+
+                      <p className="mt-1 text-xs leading-5 text-emerald-700">
+                        {merchantAccessLevel === "branch"
+                          ? "Tendrá acceso únicamente a la sucursal seleccionada."
+                          : merchantAccessLevel === "merchant"
+                            ? "Tendrá acceso al comercio seleccionado y a todas sus sucursales."
+                            : merchantAccessLevel === "brand"
+                              ? "Tendrá acceso a todos los comercios y sucursales pertenecientes a la marca seleccionada."
+                              : "Tendrá acceso a todas las marcas, comercios y sucursales pertenecientes al grupo seleccionado."}
+                      </p>
+                    </div>
+                   
+                  </>
+                )}
               </FormSection>
-
               <div className="border-t border-slate-200 px-4 py-3 md:px-6 md:py-4">
                 <button
                   type="submit"
@@ -625,7 +979,9 @@ export default function UsuariosClient() {
                   className="w-full rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                 >
                   {creating
-                    ? "Creando usuario..."
+                  ? "Creando usuario..."
+                  : userType === "merchant"
+                    ? "Crear usuario Portal Comercio"
                     : "Crear usuario"}
                 </button>
               </div>

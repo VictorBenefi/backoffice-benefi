@@ -61,16 +61,19 @@ export default function CambiarClavePage() {
     try {
       setLoading(true);
 
-      const res = await fetch("/api/admin/reset-password", {
+      const res = await fetch(
+      "/api/account/change-password",
+      {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type":
+            "application/json",
         },
         body: JSON.stringify({
-          userId,
           password,
         }),
-      });
+      }
+    );
 
       const data = await res.json().catch(() => null);
 

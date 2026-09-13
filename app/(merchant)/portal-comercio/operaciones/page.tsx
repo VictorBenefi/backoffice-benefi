@@ -18,6 +18,13 @@ type Transaction = {
   payment_method: string | null;
 
   gross_amount: number | null;
+  merchant_net_amount: number | null;
+
+    operation_detail: {
+    card?: {
+        card_brand?: string | null;
+    } | null;
+    } | null;
   currency: string | null;
   transaction_datetime: string | null;
   status: string | null;
@@ -119,15 +126,28 @@ function normalize(value: string | null | undefined) {
 }
 
 function getPosDisplay(pos: PosDevice | null) {
-  if (!pos) return "Sin vincular";
+  if (!pos) {
+    return "Sin vincular";
+  }
 
-  const serialSuffix = pos.serial
-    ? pos.serial.slice(-5)
-    : "-";
+  const serialSuffix =
+    pos.serial
+      ? pos.serial.slice(-5)
+      : null;
 
-  return pos.merchant_reference
-    ? `${pos.merchant_reference} / ${serialSuffix}`
-    : serialSuffix;
+  if (
+    pos.merchant_reference?.trim() &&
+    serialSuffix
+  ) {
+    return `${pos.merchant_reference.trim()} / ${serialSuffix}`;
+  }
+
+  if (serialSuffix) {
+    return serialSuffix;
+  }
+
+  return pos.code ||
+    "Sin vincular";
 }
 
 function isApproved(transaction: Transaction) {
@@ -188,6 +208,13 @@ function paymentMethodLabel(value: string | null) {
     default:
       return value || "-";
   }
+}
+
+function getCardBrand(transaction: Transaction) {
+  return (
+    transaction.operation_detail?.card
+      ?.card_brand || "-"
+  );
 }
 
 function statusLabel(value: string | null) {
@@ -256,8 +283,8 @@ export default function OperacionesPage() {
     setMessage("");
 
     try {
-      const response = await fetch(
-  "/api/operaciones",
+const response = await fetch(
+  "/api/portal-comercio/operaciones",
   {
     method: "GET",
     cache: "no-store",
@@ -427,8 +454,8 @@ const filteredTransactions = useMemo(() => {
             : null;
 
         const pos = transaction.pos_id
-          ? posMap.get(transaction.pos_id)
-          : null;
+        ? posMap.get(transaction.pos_id) || null
+        : null;
 
         const searchable = [
           merchant?.name,
@@ -511,7 +538,7 @@ const filteredTransactions = useMemo(() => {
     };
   }, [filteredTransactions]);
 
-  const handleExportExcel = () => {
+const handleExportExcel = () => {
   if (filteredTransactions.length === 0) {
     setMessage(
       "Error: no hay operaciones para exportar con los filtros seleccionados."
@@ -538,6 +565,10 @@ const filteredTransactions = useMemo(() => {
         ? posMap.get(transaction.pos_id)
         : null;
 
+      const cardBrand =
+        transaction.operation_detail?.card
+          ?.card_brand || "-";
+
       return {
         "Fecha / hora": formatDateTime(
           transaction.transaction_datetime
@@ -549,22 +580,10 @@ const filteredTransactions = useMemo(() => {
         Sucursal:
           branch?.branch_name || "Casa central",
 
-        POS:
-          pos?.code || "Sin vincular",
-
-        Serial:
-          transaction.serial_number ||
-          pos?.serial ||
-          "",
+        POS: getPosDisplay(pos || null),
 
         "N° operación":
           transaction.operation_number || "",
-
-        "ID operación":
-          transaction.operation_id || "",
-
-        "ID transacción MENTA":
-          transaction.transaction_id,
 
         "Tipo de operación":
           operationLabel(transaction),
@@ -574,25 +593,24 @@ const filteredTransactions = useMemo(() => {
             transaction.payment_method
           ),
 
+        Marca:
+          cardBrand,
+
         Cuotas:
           transaction.installments || "",
 
-        Financiación:
-          transaction.financing || "",
-
-        Importe:
+        Bruto:
           Number(
             transaction.gross_amount || 0
           ),
 
-        Moneda:
-          transaction.currency || "ARS",
+        Neto:
+          Number(
+            transaction.merchant_net_amount || 0
+          ),
 
         Estado:
           statusLabel(transaction.status),
-
-        Adquirente:
-          transaction.acquirer || "",
       };
     }
   );
@@ -604,19 +622,15 @@ const filteredTransactions = useMemo(() => {
     { wch: 20 },
     { wch: 28 },
     { wch: 24 },
-    { wch: 12 },
-    { wch: 22 },
-    { wch: 18 },
-    { wch: 24 },
-    { wch: 38 },
-    { wch: 24 },
-    { wch: 18 },
-    { wch: 10 },
-    { wch: 18 },
-    { wch: 16 },
-    { wch: 10 },
     { wch: 14 },
+    { wch: 18 },
+    { wch: 20 },
+    { wch: 18 },
     { wch: 16 },
+    { wch: 10 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 14 },
   ];
 
   const workbook =
@@ -639,7 +653,7 @@ const filteredTransactions = useMemo(() => {
     : "";
 
   const fileName =
-    `operaciones_benefi${comercioArchivo}_${dateFrom}_${dateTo}.xlsx`;
+    `operaciones_comercio${comercioArchivo}_${dateFrom}_${dateTo}.xlsx`;
 
   XLSX.writeFile(
     workbook,
@@ -766,17 +780,7 @@ const filteredTransactions = useMemo(() => {
             >
                 Exportar Excel
             </button>
-            <button
-            type="button"
-            onClick={handleSync}
-            disabled={syncing}
-            className="w-full rounded-xl bg-[#1E3A5F] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-            >
-            {syncing
-                ? "Sincronizando..."
-                : "Sincronizar con MENTA"}
-            </button>
-      </div>
+        </div>
      </div>
       {message && (
         <div
@@ -1007,7 +1011,7 @@ const filteredTransactions = useMemo(() => {
         ) : (
           <>
             <div className="hidden max-h-[620px] overflow-auto lg:block">
-              <table className="w-full min-w-[1100px] text-left text-sm">
+              <table className="w-full min-w-[1350px] text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-slate-50 text-xs uppercase tracking-wide text-slate-500 shadow-sm">
                   <tr>
                     <th className="px-4 py-3">
@@ -1034,12 +1038,20 @@ const filteredTransactions = useMemo(() => {
                       Medio
                     </th>
 
+                    <th className="px-4 py-3">
+                      Marca
+                    </th>
+
                     <th className="px-4 py-3 text-center">
                       Cuotas
                     </th>
 
                     <th className="px-4 py-3 text-right">
-                      Importe
+                      Bruto
+                    </th>
+
+                    <th className="px-4 py-3 text-right">
+                      Neto
                     </th>
 
                     <th className="px-4 py-3">
@@ -1235,6 +1247,10 @@ function OperationRow({
         )}
       </td>
 
+      <td className="px-4 py-3 text-slate-700">
+        {getCardBrand(transaction)}
+      </td>
+
       <td className="px-4 py-3 text-center text-slate-700">
         {transaction.installments || "-"}
       </td>
@@ -1248,6 +1264,21 @@ function OperationRow({
       >
         {formatMoney(
           Number(transaction.gross_amount || 0),
+          transaction.currency || "ARS"
+        )}
+      </td>
+
+      <td
+        className={`whitespace-nowrap px-4 py-3 text-right font-semibold ${
+          refund
+            ? "text-amber-700"
+            : "text-slate-950"
+        }`}
+      >
+        {formatMoney(
+          Number(
+            transaction.merchant_net_amount || 0
+          ),
           transaction.currency || "ARS"
         )}
       </td>
@@ -1283,7 +1314,7 @@ function OperationCard({
 
           <p className="mt-1 text-xs text-slate-500">
             {branch?.branch_name || "Casa central"} ·{" "}
-              {getPosDisplay(pos)}
+            {getPosDisplay(pos)}
           </p>
         </div>
 
@@ -1303,6 +1334,11 @@ function OperationCard({
           value={paymentMethodLabel(
             transaction.payment_method
           )}
+        />
+
+        <MobileDetail
+          label="Marca"
+          value={getCardBrand(transaction)}
         />
 
         <MobileDetail
@@ -1335,9 +1371,49 @@ function OperationCard({
       </div>
 
       <div className="mt-4 border-t border-slate-100 pt-3">
-        <p className="text-xs text-slate-500">
-          Importe
-        </p>
+        <div className="mt-4 grid grid-cols-2 gap-4 border-t border-slate-100 pt-3">
+          <div>
+            <p className="text-xs text-slate-500">
+              Bruto
+            </p>
+
+            <p
+              className={`mt-1 text-lg font-bold ${
+                refund
+                  ? "text-amber-700"
+                  : "text-slate-950"
+              }`}
+            >
+              {formatMoney(
+                Number(
+                  transaction.gross_amount || 0
+                ),
+                transaction.currency || "ARS"
+              )}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs text-slate-500">
+              Neto
+            </p>
+
+            <p
+              className={`mt-1 text-lg font-bold ${
+                refund
+                  ? "text-amber-700"
+                  : "text-slate-950"
+              }`}
+            >
+              {formatMoney(
+                Number(
+                  transaction.merchant_net_amount || 0
+                ),
+                transaction.currency || "ARS"
+              )}
+            </p>
+          </div>
+        </div>
 
         <p
           className={`mt-1 text-xl font-bold ${

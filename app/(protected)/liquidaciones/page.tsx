@@ -13,8 +13,43 @@ type Liquidation = {
   operation_count: number | string;
   pos_count: number | string;
   pos_codes: string | null;
+
   gross_amount: number | string | null;
-  merchant_net_amount: number | string | null;
+
+  merchant_commission:
+    | number
+    | string
+    | null;
+
+  merchant_commission_vat:
+    | number
+    | string
+    | null;
+
+  financial_cost:
+    | number
+    | string
+    | null;
+
+  financial_cost_vat:
+    | number
+    | string
+    | null;
+
+  calculated_net_amount:
+    | number
+    | string
+    | null;
+
+  merchant_net_amount:
+    | number
+    | string
+    | null;
+
+  reconciliation_difference:
+    | number
+    | string
+    | null;
 };
 
 type Merchant = {
@@ -87,6 +122,10 @@ function formatDate(value: string | null) {
   }
 
   return `${day}/${month}/${year}`;
+}
+
+function isReconciled(value: unknown) {
+  return Math.abs(toNumber(value)) <= 1;
 }
 
 export default function LiquidacionesPage() {
@@ -485,6 +524,10 @@ export default function LiquidacionesPage() {
                       Neto
                     </th>
 
+                    <th className="px-4 py-3 text-center font-semibold">
+                      Conciliación
+                    </th>
+
                     <th className="px-4 py-3 text-right font-semibold">
                      Acción
                     </th>
@@ -554,6 +597,20 @@ export default function LiquidacionesPage() {
                               item.merchant_net_amount
                             )}
                           </td>
+
+                        <td className="px-4 py-3 text-center">
+                          {isReconciled(
+                            item.reconciliation_difference
+                          ) ? (
+                            <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                              Conciliada
+                            </span>
+                          ) : (
+                            <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                              Diferencia
+                            </span>
+                          )}
+                        </td>
 
                           <td className="px-4 py-3 text-right">
                             <button

@@ -25,7 +25,19 @@ type MentaTransaction = {
 
   merchant_additional_info?: unknown;
   operation_additional_info?: unknown;
-  operation_detail?: unknown;
+  operation_detail?: {
+  reference_operation_id?: string | null;
+  reference_operation_number?: string | number | null;
+
+  card?: {
+    card_bin?: string | null;
+    card_mask?: string | null;
+    card_brand?: string | null;
+    is_international_card?: boolean | null;
+  } | null;
+
+  [key: string]: unknown;
+} | null;
   tax_info?: {
   payment_date?: string | null;
   net_amount?: number | string | null;
@@ -158,31 +170,99 @@ export async function POST() {
       );
     }
 
-    // 3. Eliminar duplicados por transaction_id
-    const uniqueTransactions =
-      new Map<string, MentaTransaction>();
+    // 3. Eliminar duplicados por operation_id
+const uniqueTransactions =
+  new Map<string, MentaTransaction>();
 
-    let skipped = 0;
+let skipped = 0;
 
-    for (const transaction of allTransactions) {
-      const transactionId =
-        transaction.transaction_id
-          ? String(transaction.transaction_id)
-          : null;
+for (const transaction of allTransactions) {
+  const operationId =
+    transaction.operation_id
+      ? String(transaction.operation_id)
+      : null;
 
-      if (!transactionId) {
-        skipped++;
-        continue;
-      }
+  if (!operationId) {
+    skipped++;
+    continue;
+  }
 
-      uniqueTransactions.set(
-        transactionId,
-        transaction
-      );
+  uniqueTransactions.set(
+    operationId,
+    transaction
+  );
+}
+
+const transactions =
+  Array.from(uniqueTransactions.values());
+
+    const referencedOperationIds = Array.from(
+  new Set(
+    transactions
+      .filter(
+        (transaction) =>
+          transaction.operation_type === "ANNULMENT" ||
+          transaction.operation_type === "REFUND"
+      )
+      .map(
+        (transaction) =>
+          transaction.operation_detail
+            ?.reference_operation_id
+      )
+      .filter(
+        (
+          referenceOperationId
+        ): referenceOperationId is string =>
+          Boolean(referenceOperationId)
+      )
+  )
+);
+
+for (const referenceOperationId of referencedOperationIds) {
+  const alreadyIncluded =
+    transactions.some(
+      (transaction) =>
+        transaction.operation_id ===
+        referenceOperationId
+    );
+
+  if (alreadyIncluded) {
+    continue;
+  }
+
+  const referencedResponse =
+    await mentaRequest<MentaTransactionResponse>(
+      `/v2/transaction-reports?operationId=${encodeURIComponent(
+        referenceOperationId
+      )}&page=0&size=100`
+    );
+
+  const referencedTransactions =
+    referencedResponse.content || [];
+
+  for (const referencedTransaction of referencedTransactions) {
+    const operationId =
+      referencedTransaction.operation_id
+        ? String(
+            referencedTransaction.operation_id
+          )
+        : null;
+
+    if (!operationId) {
+      continue;
     }
 
-    const transactions =
-      Array.from(uniqueTransactions.values());
+    uniqueTransactions.set(
+      operationId,
+      referencedTransaction
+    );
+  }
+}
+
+const transactionsWithReferences =
+  Array.from(
+    uniqueTransactions.values()
+  );
 
     // 4. Cargar POS BENEFÍ
     const { data: posDevices, error: posError } =
@@ -219,7 +299,8 @@ export async function POST() {
 
     let withoutPos = 0;
 
-    const rows = transactions.map(
+    const rows =
+    transactionsWithReferences.map(
       (transaction) => {
         const transactionId = String(
           transaction.transaction_id
@@ -391,7 +472,7 @@ export async function POST() {
         await supabase
           .from("menta_transactions")
           .upsert(batch, {
-            onConflict: "transaction_id",
+            onConflict: "operation_id",
           });
 
       if (syncError) {
@@ -414,7 +495,7 @@ export async function POST() {
           allTransactions.length,
 
         unique_transactions:
-          transactions.length,
+        transactionsWithReferences.length,
 
         duplicated_transactions:
           allTransactions.length -

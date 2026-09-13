@@ -1,24 +1,54 @@
 "use client";
 
+import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
 
 export default function LogoutButton() {
   const supabase = createClient();
-  const router = useRouter();
+
+  const [isLoggingOut, setIsLoggingOut] =
+    useState(false);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
+    if (isLoggingOut) {
+      return;
+    }
+
+    setIsLoggingOut(true);
+
+    try {
+      const { error } =
+        await supabase.auth.signOut();
+
+      if (error) {
+        throw error;
+      }
+
+      window.location.replace("/login");
+    } catch (error) {
+      console.error(
+        "Error cerrando sesión:",
+        error
+      );
+
+      setIsLoggingOut(false);
+
+      alert(
+        "No se pudo cerrar la sesión. Intentá nuevamente."
+      );
+    }
   };
 
   return (
     <button
+      type="button"
       onClick={handleLogout}
-      className="w-full rounded-xl border border-slate-700 px-4 py-3 text-left text-sm font-medium text-slate-200 hover:bg-slate-800 hover:text-white transition"
+      disabled={isLoggingOut}
+      className="w-full rounded-xl border border-slate-700 px-4 py-3 text-left text-sm font-medium text-slate-200 transition hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
     >
-      Cerrar sesión
+      {isLoggingOut
+        ? "Cerrando sesión..."
+        : "Cerrar sesión"}
     </button>
   );
 }

@@ -65,6 +65,11 @@ export default function LoginPage() {
       return;
     }
 
+    if (appUser.role === "merchant") {
+      router.push("/portal-comercio");
+      return;
+    }
+
     router.push("/dashboard");
   };
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdminApi } from "@/lib/require-admin-api";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -13,6 +14,18 @@ const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
 
 export async function POST(req: Request) {
   try {
+    const admin =
+      await requireAdminApi();
+
+    if (!admin) {
+      return NextResponse.json(
+        {
+          error: "No autorizado.",
+        },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
 
     const userId = body.userId;

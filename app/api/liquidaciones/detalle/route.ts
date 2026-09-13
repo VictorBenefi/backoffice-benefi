@@ -73,7 +73,8 @@ export async function GET(request: NextRequest) {
         status,
         installments,
         financing,
-        acquirer
+        acquirer,
+        operation_detail
       `)
       .eq(
         "merchant_id_benefi",
@@ -93,6 +94,7 @@ export async function GET(request: NextRequest) {
       merchantResult,
       branchesResult,
       posResult,
+      liquidationResult,
     ] = await Promise.all([
       query.order(
         "transaction_datetime",
@@ -102,10 +104,22 @@ export async function GET(request: NextRequest) {
       ),
 
       supabase
-        .from("merchants")
-        .select("id, name")
-        .eq("id", merchantId)
-        .maybeSingle(),
+      .from("merchants")
+      .select(`
+        id,
+        name,
+        cuit,
+        address,
+        street,
+        street_number,
+        floor,
+        apartment,
+        postal_code,
+        city,
+        province
+      `)
+      .eq("id", merchantId)
+      .maybeSingle(),
 
       supabase
         .from("merchant_branches")
@@ -120,12 +134,32 @@ export async function GET(request: NextRequest) {
       supabase
         .from("pos_devices")
         .select(
-          "id, code, serial, merchant_id, merchant_branch_id"
+          "id, code, serial, merchant_reference, merchant_id, merchant_branch_id"
         )
         .eq(
           "merchant_id",
           merchantId
         ),
+      supabase
+        .from("menta_liquidation_summary")
+        .select(`
+          merchant_commission,
+          merchant_commission_vat,
+          financial_cost,
+          financial_cost_vat,
+          calculated_net_amount,
+          merchant_net_amount,
+          reconciliation_difference
+        `)
+        .eq(
+          "merchant_id_benefi",
+          merchantId
+        )
+        .eq(
+          "merchant_payment_date",
+          paymentDate
+        )
+        .maybeSingle(),
     ]);
 
     if (transactionsResult.error) {
@@ -149,6 +183,12 @@ export async function GET(request: NextRequest) {
     if (posResult.error) {
       throw new Error(
         `POS: ${posResult.error.message}`
+      );
+    }
+
+    if (liquidationResult.error) {
+      throw new Error(
+        `Liquidación: ${liquidationResult.error.message}`
       );
     }
 
@@ -185,38 +225,116 @@ export async function GET(request: NextRequest) {
         .filter(Boolean)
     );
 
-    return NextResponse.json({
-      ok: true,
+  return NextResponse.json({
+  ok: true,
 
-      liquidation: {
-        merchant_id: merchantId,
-        merchant_name:
-          merchantResult.data?.name ||
-          "Sin vincular",
+  liquidation: {
+    merchant_id: merchantId,
 
-        payment_date: paymentDate,
-        
-        operation_count:
-          transactions.length,
+    merchant_name:
+      merchantResult.data?.name ||
+      "Sin vincular",
 
-        pos_count:
-          posIds.size,
+    merchant_cuit:
+      merchantResult.data?.cuit ||
+      null,
 
-        gross_amount:
-          grossAmount,
+    merchant_address:
+      merchantResult.data?.address ||
+      null,
 
-        merchant_net_amount:
-          netAmount,
-      },
+    merchant_street:
+      merchantResult.data?.street ||
+      null,
 
-      transactions,
+    merchant_street_number:
+      merchantResult.data
+        ?.street_number ||
+      null,
 
-      branches:
-        branchesResult.data || [],
+    merchant_floor:
+      merchantResult.data?.floor ||
+      null,
 
-      posDevices:
-        posResult.data || [],
-    });
+    merchant_apartment:
+      merchantResult.data
+        ?.apartment ||
+      null,
+
+    merchant_postal_code:
+      merchantResult.data
+        ?.postal_code ||
+      null,
+
+    merchant_city:
+      merchantResult.data?.city ||
+      null,
+
+    merchant_province:
+      merchantResult.data
+        ?.province ||
+      null,
+
+    payment_date: paymentDate,
+
+    operation_count:
+      transactions.length,
+
+    pos_count:
+      posIds.size,
+
+    gross_amount:
+      grossAmount,
+
+    merchant_commission:
+      Number(
+        liquidationResult.data
+          ?.merchant_commission || 0
+      ),
+
+    merchant_commission_vat:
+      Number(
+        liquidationResult.data
+          ?.merchant_commission_vat || 0
+      ),
+
+    financial_cost:
+      Number(
+        liquidationResult.data
+          ?.financial_cost || 0
+      ),
+
+    financial_cost_vat:
+      Number(
+        liquidationResult.data
+          ?.financial_cost_vat || 0
+      ),
+
+    calculated_net_amount:
+      Number(
+        liquidationResult.data
+          ?.calculated_net_amount || 0
+      ),
+
+    merchant_net_amount:
+      netAmount,
+
+    reconciliation_difference:
+      Number(
+        liquidationResult.data
+          ?.reconciliation_difference ||
+          0
+      ),
+  },
+
+  transactions,
+
+  branches:
+    branchesResult.data || [],
+
+  posDevices:
+    posResult.data || [],
+});
   } catch (error) {
     console.error(
       "Error cargando detalle de liquidación:",

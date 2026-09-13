@@ -43,12 +43,18 @@ export default function ResponsiveProtectedShell({
   }, [mobileMenuOpen]);
 
   const isActive = (href: string) => {
-    if (href === "/dashboard") {
-      return pathname === href;
-    }
+  if (
+    href === "/dashboard" ||
+    href === "/portal-comercio"
+  ) {
+    return pathname === href;
+  }
 
-    return pathname === href || pathname.startsWith(`${href}/`);
-  };
+  return (
+    pathname === href ||
+    pathname.startsWith(`${href}/`)
+  );
+};
 
   const sidebarContent = (
     <div className="flex h-full flex-col">

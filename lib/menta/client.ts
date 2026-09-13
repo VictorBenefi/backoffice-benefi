@@ -1,5 +1,6 @@
 const MENTA_API_URL =
-  process.env.MENTA_API_URL || "https://api.menta.global/api";
+  process.env.MENTA_API_URL ||
+  "https://api.menta.global/api";
 
 type MentaLoginResponse = {
   token?: {
@@ -8,13 +9,29 @@ type MentaLoginResponse = {
 };
 
 type MentaRequestOptions = {
-  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  method?:
+    | "GET"
+    | "POST"
+    | "PUT"
+    | "PATCH"
+    | "DELETE";
   body?: unknown;
 };
 
+type CachedToken = {
+  accessToken: string;
+  expiresAt: number;
+};
+
+let cachedToken: CachedToken | null = null;
+
+const TOKEN_CACHE_TIME_MS =
+  10 * 60 * 1000;
+
 function getCredentials() {
   const user = process.env.MENTA_API_USER;
-  const password = process.env.MENTA_API_PASSWORD;
+  const password =
+    process.env.MENTA_API_PASSWORD;
 
   if (!user || !password) {
     throw new Error(
@@ -25,8 +42,19 @@ function getCredentials() {
   return { user, password };
 }
 
-async function getAccessToken() {
-  const { user, password } = getCredentials();
+async function getAccessToken(
+  forceRefresh = false
+) {
+  if (
+    !forceRefresh &&
+    cachedToken &&
+    cachedToken.expiresAt > Date.now()
+  ) {
+    return cachedToken.accessToken;
+  }
+
+  const { user, password } =
+    getCredentials();
 
   const response = await fetch(
     `${MENTA_API_URL}/v1/login`,
@@ -34,7 +62,8 @@ async function getAccessToken() {
       method: "POST",
       headers: {
         Accept: "application/json",
-        "Content-Type": "application/json",
+        "Content-Type":
+          "application/json",
       },
       body: JSON.stringify({
         user,
@@ -44,7 +73,8 @@ async function getAccessToken() {
     }
   );
 
-  let data: MentaLoginResponse | null = null;
+  let data: MentaLoginResponse | null =
+    null;
 
   try {
     data = await response.json();
@@ -60,7 +90,8 @@ async function getAccessToken() {
     );
   }
 
-  const accessToken = data?.token?.access_token;
+  const accessToken =
+    data?.token?.access_token;
 
   if (!accessToken) {
     throw new Error(
@@ -68,23 +99,33 @@ async function getAccessToken() {
     );
   }
 
+  cachedToken = {
+    accessToken,
+    expiresAt:
+      Date.now() + TOKEN_CACHE_TIME_MS,
+  };
+
   return accessToken;
 }
 
-export async function mentaRequest<T>(
+async function executeRequest<T>(
   path: string,
-  options: MentaRequestOptions = {}
-): Promise<T> {
-  const accessToken = await getAccessToken();
-
+  options: MentaRequestOptions,
+  accessToken: string
+): Promise<{
+  response: Response;
+  data: unknown;
+}> {
   const response = await fetch(
     `${MENTA_API_URL}${path}`,
     {
       method: options.method || "GET",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization:
+          `Bearer ${accessToken}`,
         Accept: "application/json",
-        "Content-Type": "application/json",
+        "Content-Type":
+          "application/json",
       },
       body:
         options.body !== undefined
@@ -102,13 +143,49 @@ export async function mentaRequest<T>(
     data = null;
   }
 
-  if (!response.ok) {
+  return {
+    response,
+    data,
+  };
+}
+
+export async function mentaRequest<T>(
+  path: string,
+  options: MentaRequestOptions = {}
+): Promise<T> {
+  let accessToken =
+    await getAccessToken();
+
+  let result =
+    await executeRequest<T>(
+      path,
+      options,
+      accessToken
+    );
+
+  if (
+    result.response.status === 401
+  ) {
+    cachedToken = null;
+
+    accessToken =
+      await getAccessToken(true);
+
+    result =
+      await executeRequest<T>(
+        path,
+        options,
+        accessToken
+      );
+  }
+
+  if (!result.response.ok) {
     throw new Error(
-      `MENTA respondió ${response.status}: ${JSON.stringify(
-        data
+      `MENTA respondió ${result.response.status}: ${JSON.stringify(
+        result.data
       )}`
     );
   }
 
-  return data as T;
+  return result.data as T;
 }
