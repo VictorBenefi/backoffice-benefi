@@ -24,6 +24,19 @@ export default async function ProtectedLayout({
       label: "Vendedores",
       roles: ["admin", "supervisor"],
     },
+
+    {
+      href: "/grupos",
+      label: "Grupos",
+      roles: ["admin"],
+    },
+
+    {
+      href: "/marcas",
+      label: "Marcas",
+      roles: ["admin"],
+    },
+
     {
       href: "/comercios",
       label: "Comercios",

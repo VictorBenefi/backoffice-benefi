@@ -9,6 +9,7 @@ import {
 
 type Liquidation = {
   merchant_id_benefi: string | null;
+  merchant_branch_id_benefi: string | null;
   merchant_payment_date: string;
   operation_count: number | string;
   pos_count: number | string;
@@ -55,6 +56,13 @@ type Liquidation = {
 type Merchant = {
   id: string;
   name: string;
+};
+
+type MerchantBranch = {
+  id: string;
+  merchant_id: string;
+  branch_number: number;
+  branch_name: string | null;
 };
 
 function today() {
@@ -137,6 +145,10 @@ export default function LiquidacionesPage() {
     Merchant[]
   >([]);
 
+  const [branches, setBranches] = useState<
+    MerchantBranch[]
+  >([]);
+
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -150,6 +162,9 @@ export default function LiquidacionesPage() {
 
   const [merchantFilter, setMerchantFilter] =
     useState("");
+
+  const [branchFilter, setBranchFilter] =
+  useState("");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -180,6 +195,11 @@ export default function LiquidacionesPage() {
       setMerchants(
         (data.merchants || []) as Merchant[]
       );
+
+      setBranches(
+        (data.branches || []) as MerchantBranch[]
+      );
+
     } catch (error) {
       console.error(
         "Error cargando liquidaciones:",
@@ -209,6 +229,15 @@ export default function LiquidacionesPage() {
     );
   }, [merchants]);
 
+  const branchMap = useMemo(() => {
+    return new Map(
+      branches.map((branch) => [
+        branch.id,
+        branch,
+      ])
+    );
+  }, [branches]);
+
   const filteredLiquidations = useMemo(() => {
     return liquidations.filter((item) => {
       if (
@@ -232,6 +261,13 @@ export default function LiquidacionesPage() {
         return false;
       }
 
+      if (
+        branchFilter &&
+        item.merchant_branch_id_benefi !== branchFilter
+      ) {
+        return false;
+      }
+
       return true;
     });
   }, [
@@ -239,6 +275,7 @@ export default function LiquidacionesPage() {
     dateFrom,
     dateTo,
     merchantFilter,
+    branchFilter,
     
   ]);
 
@@ -322,6 +359,7 @@ export default function LiquidacionesPage() {
     setDateFrom(firstDayOfMonth());
     setDateTo(lastDayOfMonth());
     setMerchantFilter("");
+    setBranchFilter("");
   };
 
   return (
@@ -437,11 +475,10 @@ export default function LiquidacionesPage() {
 
             <select
               value={merchantFilter}
-              onChange={(event) =>
-                setMerchantFilter(
-                  event.target.value
-                )
-              }
+              onChange={(event) => {
+                setMerchantFilter(event.target.value);
+                setBranchFilter("");
+              }}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
             >
               <option value="">
@@ -456,6 +493,39 @@ export default function LiquidacionesPage() {
                   {merchant.name}
                 </option>
               ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-600">
+              Sucursal
+            </label>
+
+            <select
+              value={branchFilter}
+              onChange={(event) =>
+                setBranchFilter(event.target.value)
+              }
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+            >
+              <option value="">
+                Todas las sucursales
+              </option>
+
+              {branches
+                .filter(
+                  (branch) =>
+                    !merchantFilter ||
+                    branch.merchant_id === merchantFilter
+                )
+                .map((branch) => (
+                  <option
+                    key={branch.id}
+                    value={branch.id}
+                  >
+                    {branch.branch_name ||
+                      `Sucursal ${branch.branch_number}`}
+                  </option>
+                ))}
             </select>
           </div>
           
@@ -543,6 +613,12 @@ export default function LiquidacionesPage() {
                               item.merchant_id_benefi
                             )
                           : null;
+                      const branch =
+                        item.merchant_branch_id_benefi
+                          ? branchMap.get(
+                              item.merchant_branch_id_benefi
+                            )
+                          : null;
 
                       const key = [
                         item.merchant_id_benefi,
@@ -561,9 +637,14 @@ export default function LiquidacionesPage() {
                             )}
                           </td>
 
-                          <td className="px-4 py-3 font-medium text-slate-900">
-                            {merchant?.name ||
-                              "Sin vincular"}
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-slate-900">
+                              {merchant?.name || "Sin vincular"}
+                            </div>
+
+                            <div className="mt-1 text-xs text-slate-500">
+                              {branch?.branch_name || "Casa central"}
+                            </div>
                           </td>
 
                           
@@ -616,14 +697,21 @@ export default function LiquidacionesPage() {
                             <button
                                 type="button"
                                 onClick={() => {
-                                const params = new URLSearchParams({
+                                  const params = new URLSearchParams({
                                     merchant_id:
-                                        item.merchant_id_benefi || "",
+                                      item.merchant_id_benefi || "",
                                     payment_date:
-                                        item.merchant_payment_date,
-                                    });
+                                      item.merchant_payment_date,
+                                  });
 
-                                    window.location.href =
+                                  if (item.merchant_branch_id_benefi) {
+                                    params.set(
+                                      "branch_id",
+                                      item.merchant_branch_id_benefi
+                                    );
+                                  }
+
+                                  window.location.href =
                                     `/liquidaciones/detalle?${params.toString()}`;
                                 }}
                                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
@@ -648,6 +736,12 @@ export default function LiquidacionesPage() {
                           item.merchant_id_benefi
                         )
                       : null;
+                  const branch =
+                    item.merchant_branch_id_benefi
+                      ? branchMap.get(
+                          item.merchant_branch_id_benefi
+                        )
+                      : null;
 
                   const key = [
                     item.merchant_id_benefi,
@@ -666,6 +760,10 @@ export default function LiquidacionesPage() {
                             {merchant?.name ||
                               "Sin vincular"}
                           </p>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          {branch?.branch_name || "Casa central"}
+                        </p>
 
                           <p className="mt-1 text-sm text-slate-500">
                             Pago{" "}

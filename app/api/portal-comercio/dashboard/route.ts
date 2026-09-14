@@ -42,6 +42,8 @@ export async function GET() {
     const fullMerchantAccessIds =
       merchantAccess.fullMerchantAccessIds;
 
+    const access = merchantAccess.access[0];
+
     if (
       allowedMerchantIds.length === 0 &&
       allowedBranchIds.length === 0
@@ -185,14 +187,31 @@ export async function GET() {
           ascending: true,
         });
 
+    const groupQuery =
+    access.merchant_group_id
+      ? supabase
+          .from("merchant_groups")
+          .select("id, name")
+          .eq(
+            "id",
+            access.merchant_group_id
+          )
+          .maybeSingle()
+      : Promise.resolve({
+          data: null,
+          error: null,
+        });
+
     const [
       liquidationsResult,
       merchantsResult,
       monthlySalesResult,
+      groupResult,
     ] = await Promise.all([
       liquidationsQuery,
       merchantsQuery,
       monthlySalesQuery,
+      groupQuery,
     ]);
 
     if (liquidationsResult.error) {
@@ -204,6 +223,12 @@ export async function GET() {
     if (merchantsResult.error) {
       throw new Error(
         `Comercios: ${merchantsResult.error.message}`
+      );
+    }
+
+    if (groupResult.error) {
+      throw new Error(
+        `Grupo: ${groupResult.error.message}`
       );
     }
 
@@ -413,6 +438,20 @@ export async function GET() {
 
     return NextResponse.json({
       ok: true,
+
+      scope: {
+        type: access.merchant_group_id
+          ? "group"
+          : access.merchant_brand_id
+            ? "brand"
+            : access.merchant_id
+              ? "merchant"
+              : access.merchant_branch_id
+                ? "branch"
+                : null,
+
+        name: groupResult.data?.name || null,
+      },
 
       liquidations,
 

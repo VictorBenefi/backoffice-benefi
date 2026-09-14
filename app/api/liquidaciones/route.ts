@@ -31,11 +31,13 @@ export async function GET() {
     const [
       liquidationsResult,
       merchantsResult,
+      branchesResult,
     ] = await Promise.all([
       supabase
         .from("menta_liquidation_summary")
         .select(`
         merchant_id_benefi,
+        merchant_branch_id_benefi,
         merchant_payment_date,
         operation_count,
         pos_count,
@@ -59,6 +61,18 @@ export async function GET() {
         .order("name", {
           ascending: true,
         }),
+
+      supabase
+      .from("merchant_branches")
+      .select(`
+        id,
+        merchant_id,
+        branch_number,
+        branch_name
+      `)
+      .order("branch_name", {
+        ascending: true,
+      }),
     ]);
 
     if (liquidationsResult.error) {
@@ -73,6 +87,12 @@ export async function GET() {
       );
     }
 
+    if (branchesResult.error) {
+      throw new Error(
+        `Sucursales: ${branchesResult.error.message}`
+      );
+    }
+
     return NextResponse.json({
       ok: true,
 
@@ -81,6 +101,9 @@ export async function GET() {
 
       merchants:
         merchantsResult.data || [],
+
+      branches:
+        branchesResult.data || [],
     });
   } catch (error) {
     console.error(

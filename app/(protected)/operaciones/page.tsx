@@ -241,6 +241,9 @@ export default function OperacionesPage() {
   const [merchantFilter, setMerchantFilter] =
     useState("");
 
+  const [branchFilter, setBranchFilter] =
+  useState("");
+
   const [posFilter, setPosFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [paymentFilter, setPaymentFilter] =
@@ -330,14 +333,28 @@ useEffect(() => {
 }, [posDevices]);
 
 const filteredPosDevices = useMemo(() => {
-  if (!merchantFilter) {
-    return posDevices;
-  }
+  return posDevices.filter((pos) => {
+    if (
+      merchantFilter &&
+      pos.merchant_id !== merchantFilter
+    ) {
+      return false;
+    }
 
-  return posDevices.filter(
-    (pos) => pos.merchant_id === merchantFilter
-  );
-}, [posDevices, merchantFilter]);
+    if (
+      branchFilter &&
+      pos.merchant_branch_id !== branchFilter
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+}, [
+  posDevices,
+  merchantFilter,
+  branchFilter,
+]);
 
 const filteredTransactions = useMemo(() => {
     const searchText = search
@@ -377,6 +394,14 @@ const filteredTransactions = useMemo(() => {
         merchantFilter &&
         transaction.merchant_id_benefi !==
           merchantFilter
+      ) {
+        return false;
+      }
+
+      if (
+        branchFilter &&
+        transaction.merchant_branch_id_benefi !==
+          branchFilter
       ) {
         return false;
       }
@@ -457,6 +482,7 @@ const filteredTransactions = useMemo(() => {
     dateFrom,
     dateTo,
     merchantFilter,
+    branchFilter,
     posFilter,
     statusFilter,
     operationTypeFilter,
@@ -701,6 +727,7 @@ const filteredTransactions = useMemo(() => {
     setDateFrom(today());
     setDateTo(today());
     setMerchantFilter("");
+    setBranchFilter("");
     setPosFilter("");
     setStatusFilter("");
     setPaymentFilter("");
@@ -708,10 +735,8 @@ const filteredTransactions = useMemo(() => {
     setSearch("");
   };
 
-  useEffect(() => {
-  if (!posFilter) {
-    return;
-  }
+useEffect(() => {
+  if (!posFilter) return;
 
   const selectedPos = posDevices.find(
     (pos) => pos.id === posFilter
@@ -723,16 +748,20 @@ const filteredTransactions = useMemo(() => {
   }
 
   if (
-    merchantFilter &&
-    selectedPos.merchant_id !== merchantFilter
+    (merchantFilter &&
+      selectedPos.merchant_id !== merchantFilter) ||
+    (branchFilter &&
+      selectedPos.merchant_branch_id !== branchFilter)
   ) {
     setPosFilter("");
   }
 }, [
   merchantFilter,
+  branchFilter,
   posFilter,
   posDevices,
 ]);
+
   return (
     <main className="min-h-screen min-w-0 overflow-x-hidden bg-slate-50 p-4 md:p-6">
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -854,9 +883,11 @@ const filteredTransactions = useMemo(() => {
           <FilterField label="Comercio">
             <select
               value={merchantFilter}
-              onChange={(event) =>
-                setMerchantFilter(event.target.value)
-              }
+              onChange={(event) => {
+                setMerchantFilter(event.target.value);
+                setBranchFilter("");
+                setPosFilter("");
+              }}
               className={inputClass}
             >
               <option value="">
@@ -871,6 +902,41 @@ const filteredTransactions = useMemo(() => {
                   {merchant.name || "Sin nombre"}
                 </option>
               ))}
+            </select>
+          </FilterField>
+
+          <FilterField label="Sucursal">
+            <select
+              value={branchFilter}
+              onChange={(event) => {
+                setBranchFilter(
+                  event.target.value
+                );
+
+                setPosFilter("");
+              }}
+              className={inputClass}
+            >
+              <option value="">
+                Todas las sucursales
+              </option>
+
+              {branches
+                .filter(
+                  (branch) =>
+                    !merchantFilter ||
+                    branch.merchant_id ===
+                      merchantFilter
+                )
+                .map((branch) => (
+                  <option
+                    key={branch.id}
+                    value={branch.id}
+                  >
+                    {branch.branch_name ||
+                      `Sucursal ${branch.branch_number}`}
+                  </option>
+                ))}
             </select>
           </FilterField>
 

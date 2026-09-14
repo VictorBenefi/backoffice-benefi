@@ -25,6 +25,20 @@ type Vendor = {
   auth_user_id?: string | null;
 };
 
+
+type MerchantGroup = {
+  id: string;
+  name: string;
+  is_active: boolean;
+};
+
+type MerchantBrand = {
+  id: string;
+  merchant_group_id: string;
+  name: string;
+  is_active: boolean;
+};
+
 type MerchantBranch = {
   id: string;
   merchant_id: string;
@@ -58,6 +72,8 @@ type BranchFormData = {
 
 type Merchant = {
   id: string;
+  merchant_group_id: string | null;
+  merchant_brand_id: string | null;
   name: string | null;
   legal_name: string | null;
   email: string | null;
@@ -125,6 +141,8 @@ type DocumentRequirement = {
 };
 
 type FormData = {
+  merchant_group_id: string;
+  merchant_brand_id: string; 
   name: string;
   legal_name: string;
   email: string;
@@ -179,6 +197,9 @@ const emptyBranchForm: BranchFormData = {
 };
 
 const emptyForm: FormData = {
+
+  merchant_group_id: "",
+  merchant_brand_id: "",
   name: "",
   legal_name: "",
   email: "",
@@ -332,7 +353,14 @@ export default function ComerciosPage() {
   const [formData, setFormData] = useState<FormData>(emptyForm);
 
   const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [merchants, setMerchants] = useState<Merchant[]>([]);
+
+  const [merchantGroups, setMerchantGroups] =
+    useState<MerchantGroup[]>([]);
+
+  const [merchantBrands, setMerchantBrands] =
+    useState<MerchantBrand[]>([]);
+
+const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [requirements, setRequirements] = useState<DocumentRequirement[]>([]);
   const [currentMerchantFiles, setCurrentMerchantFiles] = useState<ProgressDocument[]>([]);
 
@@ -489,6 +517,48 @@ const loadMerchantBranches = async (
 
     setVendors(data || []);
   };
+
+  const loadMerchantHierarchy = async () => {
+  const [groupsResponse, brandsResponse] =
+    await Promise.all([
+      fetch("/api/merchant-groups", {
+        method: "GET",
+        cache: "no-store",
+      }),
+      fetch("/api/merchant-brands", {
+        method: "GET",
+        cache: "no-store",
+      }),
+    ]);
+
+  const groupsData =
+    await groupsResponse.json();
+
+  const brandsData =
+    await brandsResponse.json();
+
+  if (!groupsResponse.ok) {
+    throw new Error(
+      groupsData.error ||
+        "Error al cargar los grupos."
+    );
+  }
+
+  if (!brandsResponse.ok) {
+    throw new Error(
+      brandsData.error ||
+        "Error al cargar las marcas."
+    );
+  }
+
+  setMerchantGroups(
+    (groupsData.groups || []) as MerchantGroup[]
+  );
+
+  setMerchantBrands(
+    (brandsData.brands || []) as MerchantBrand[]
+  );
+};
 
   const loadMerchants = async () => {
     const { data, error } = await supabase
@@ -800,29 +870,30 @@ const refreshMerchantDocumentation = async (
 
   const loadInitialData = async () => {
     setLoadingInitialData(true);
-    setMessage("");
+setMessage("");
 
-    try {
-      await loadSessionAndRole();
+try {
+  await loadSessionAndRole();
 
-      await Promise.all([
-        loadVendors(),
-        loadMerchants(),
-        loadRequirements(),
-        loadCurrentMerchantFiles(),
-        loadActiveInstallmentPlans(),
-      ]);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Ocurrió un error al cargar la pantalla.";
+  await Promise.all([
+    loadVendors(),
+    loadMerchantHierarchy(),
+    loadMerchants(),
+    loadRequirements(),
+    loadCurrentMerchantFiles(),
+    loadActiveInstallmentPlans(),
+  ]);
+} catch (error) {
+  const errorMessage =
+    error instanceof Error
+      ? error.message
+      : "Ocurrió un error al cargar la pantalla.";
 
-      console.error(error);
-      setMessage(errorMessage);
-    } finally {
-      setLoadingInitialData(false);
-    }
+  console.error(error);
+  setMessage(errorMessage);
+} finally {
+  setLoadingInitialData(false);
+}
   };
 
   useEffect(() => {
@@ -996,6 +1067,12 @@ const refreshMerchantDocumentation = async (
       .join(", ");
 
     const payload = {
+      merchant_group_id:
+        formData.merchant_group_id || null,
+
+      merchant_brand_id:
+        formData.merchant_brand_id || null,
+
       name: formData.name.trim(),
       legal_name: nullableText(formData.legal_name),
       email: nullableText(formData.email)?.toLowerCase() || null,
@@ -1381,6 +1458,8 @@ const confirmDeleteBranch = async () => {
     setMessage("");
 
     setFormData({
+      merchant_group_id: merchant.merchant_group_id || "",
+      merchant_brand_id: merchant.merchant_brand_id || "",
       name: merchant.name || "",
       legal_name: merchant.legal_name || "",
       email: merchant.email || "",
@@ -1600,7 +1679,71 @@ const confirmDelete = async () => {
               description="Información principal, fiscal y de domicilio del comercio."
             >
               <div className="grid gap-4 md:grid-cols-2">
-                <Field label="Nombre de fantasía" required className="md:col-span-2">
+
+                <Field label="Grupo comercial">
+                  <select
+                    className={inputClass}
+                    value={formData.merchant_group_id}
+                    onChange={(event) => {
+                      const groupId = event.target.value;
+
+                      setFormData((previous) => ({
+                        ...previous,
+                        merchant_group_id: groupId,
+                        merchant_brand_id: "",
+                      }));
+                    }}
+                  >
+                    <option value="">Sin grupo</option>
+
+                    {merchantGroups
+                      .filter((group) => group.is_active)
+                      .map((group) => (
+                        <option key={group.id} value={group.id}>
+                          {group.name}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+
+                <Field label="Marca">
+                  <select
+                    className={inputClass}
+                    value={formData.merchant_brand_id}
+                    disabled={!formData.merchant_group_id}
+                    onChange={(event) =>
+                      setFormData((previous) => ({
+                        ...previous,
+                        merchant_brand_id: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="">
+                      {formData.merchant_group_id
+                        ? "Sin marca"
+                        : "Seleccioná primero un grupo"}
+                    </option>
+
+                    {merchantBrands
+                      .filter(
+                        (brand) =>
+                          brand.is_active &&
+                          brand.merchant_group_id ===
+                            formData.merchant_group_id
+                      )
+                      .map((brand) => (
+                        <option key={brand.id} value={brand.id}>
+                          {brand.name}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+
+                <Field
+                  label="Nombre de fantasía"
+                  required
+                  className="md:col-span-2"
+                >
                   <input type="text" className={inputClass} value={formData.name} onChange={(event) => handleChange("name", event.target.value)} placeholder="Ej: Farmacia Centro" />
                 </Field>
 
@@ -2606,6 +2749,23 @@ const confirmDelete = async () => {
                           {merchant.legal_name ||
                             "Sin razón social"}
                         </p>
+                        {(merchant.merchant_group_id ||
+                          merchant.merchant_brand_id) && (
+                          <p className="mt-1 truncate text-xs font-medium text-blue-600">
+                            {[
+                              merchantGroups.find(
+                                (group) =>
+                                  group.id === merchant.merchant_group_id
+                              )?.name,
+                              merchantBrands.find(
+                                (brand) =>
+                                  brand.id === merchant.merchant_brand_id
+                              )?.name,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </p>
+                        )}
                       </div>
 
                       <div className="flex shrink-0 gap-2">

@@ -37,6 +37,8 @@ export async function GET(request: NextRequest) {
 
     const paymentDate =
       searchParams.get("payment_date");
+    const branchId =
+    searchParams.get("branch_id");
 
     if (
     !merchantId ||
@@ -88,6 +90,52 @@ export async function GET(request: NextRequest) {
         "status",
         "APPROVED"
       );
+    
+    if (branchId) {
+      query = query.eq(
+        "merchant_branch_id_benefi",
+        branchId
+      );
+    } else {
+      query = query.is(
+        "merchant_branch_id_benefi",
+        null
+      );
+    }
+
+    let liquidationQuery = supabase
+    .from("menta_liquidation_summary")
+    .select(`
+      merchant_commission,
+      merchant_commission_vat,
+      financial_cost,
+      financial_cost_vat,
+      calculated_net_amount,
+      merchant_net_amount,
+      reconciliation_difference
+    `)
+    .eq(
+      "merchant_id_benefi",
+      merchantId
+    )
+    .eq(
+      "merchant_payment_date",
+      paymentDate
+    );
+
+  if (branchId) {
+    liquidationQuery =
+      liquidationQuery.eq(
+        "merchant_branch_id_benefi",
+        branchId
+      );
+  } else {
+    liquidationQuery =
+      liquidationQuery.is(
+        "merchant_branch_id_benefi",
+        null
+      );
+  }
 
     const [
       transactionsResult,
@@ -131,35 +179,34 @@ export async function GET(request: NextRequest) {
           merchantId
         ),
 
-      supabase
-        .from("pos_devices")
-        .select(
-          "id, code, serial, merchant_reference, merchant_id, merchant_branch_id"
-        )
-        .eq(
-          "merchant_id",
-          merchantId
-        ),
-      supabase
-        .from("menta_liquidation_summary")
-        .select(`
-          merchant_commission,
-          merchant_commission_vat,
-          financial_cost,
-          financial_cost_vat,
-          calculated_net_amount,
-          merchant_net_amount,
-          reconciliation_difference
-        `)
-        .eq(
-          "merchant_id_benefi",
-          merchantId
-        )
-        .eq(
-          "merchant_payment_date",
-          paymentDate
-        )
-        .maybeSingle(),
+      branchId
+      ? supabase
+          .from("pos_devices")
+          .select(
+            "id, code, serial, merchant_reference, merchant_id, merchant_branch_id"
+          )
+          .eq(
+            "merchant_id",
+            merchantId
+          )
+          .eq(
+            "merchant_branch_id",
+            branchId
+          )
+          .is(
+            "merchant_branch_id",
+            null
+          )
+      : supabase
+          .from("pos_devices")
+          .select(
+            "id, code, serial, merchant_reference, merchant_id, merchant_branch_id"
+          )
+          .eq(
+            "merchant_id",
+            merchantId
+          ),
+      liquidationQuery.maybeSingle(),
     ]);
 
     if (transactionsResult.error) {

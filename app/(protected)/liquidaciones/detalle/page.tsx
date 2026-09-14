@@ -121,10 +121,13 @@ export default function LiquidacionDetallePage() {
         setError("");
 
         const merchantId =
-            searchParams.get("merchant_id");
+          searchParams.get("merchant_id");
 
-            const paymentDate =
-            searchParams.get("payment_date");
+        const paymentDate =
+          searchParams.get("payment_date");
+
+        const branchId =
+          searchParams.get("branch_id");
 
             if (
             !merchantId ||
@@ -139,7 +142,13 @@ export default function LiquidacionDetallePage() {
             new URLSearchParams({
                 merchant_id: merchantId,
                 payment_date: paymentDate,
-        });
+            });
+          if (branchId) {
+            params.set(
+              "branch_id",
+              branchId
+            );
+          }
 
         const response = await fetch(
           `/api/liquidaciones/detalle?${params.toString()}`,
@@ -1968,14 +1977,21 @@ const accreditationSummary =
                 Todos
                 </option>
 
-                {posDevices.map((pos) => (
-                <option
-                    key={pos.id}
-                    value={pos.id}
-                >
-                    {pos.code}
-                </option>
-                ))}
+                {posDevices
+                  .filter((pos) =>
+                    transactions.some(
+                      (transaction) =>
+                        transaction.pos_id === pos.id
+                    )
+                  )
+                  .map((pos) => (
+                    <option
+                      key={pos.id}
+                      value={pos.id}
+                    >
+                      {getPosCode(pos.id)}
+                    </option>
+                  ))}
             </select>
             </div>
 

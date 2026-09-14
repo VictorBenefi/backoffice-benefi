@@ -72,9 +72,17 @@ export default function ComercioDashboardPage() {
 
   const [merchants, setMerchants] =
     useState<Merchant[]>([]);
+  
 
   const [monthlySales, setMonthlySales] =
     useState<MonthlySale[]>([]);
+
+  const [scope, setScope] =
+  useState<{
+    type: string;
+    id: string;
+    name: string;
+  } | null>(null);
 
   const [loading, setLoading] =
     useState(true);
@@ -112,6 +120,8 @@ export default function ComercioDashboardPage() {
         setMerchants(
           data.merchants || []
         );
+
+        setScope(data.scope || null);
 
         setMonthlySales(
           data.monthlySales || []
@@ -232,10 +242,30 @@ export default function ComercioDashboardPage() {
           Resumen de tus operaciones y acreditaciones.
         </p>
 
-        <p className="mt-2 text-sm font-medium text-slate-700">
-          Comercio: {merchantName}
-        </p>
-      </div>
+        {scope?.type === "group" ? (
+        <div className="mt-2">
+              <p className="text-sm font-semibold text-slate-800">
+                {scope.name}
+              </p>
+
+              <p className="mt-0.5 text-sm text-slate-600">
+                {merchants.length} comercios en la red
+              </p>
+
+              {merchants.length > 0 && (
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {merchants
+                    .map((merchant) => merchant.name)
+                    .join(" · ")}
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="mt-2 text-sm font-medium text-slate-700">
+              Comercio: {merchantName}
+            </p>
+          )}
+        </div>
 
       {message && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
