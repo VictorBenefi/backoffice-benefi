@@ -386,6 +386,10 @@ export default function ComercioDashboardPage() {
 
               <tbody>
                 {liquidations
+                  .filter(
+                    (item) =>
+                      item.merchant_payment_date <= today()
+                  )
                   .slice(0, 5)
                   .map((item, index) => (
                     <tr

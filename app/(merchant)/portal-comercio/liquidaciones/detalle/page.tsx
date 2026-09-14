@@ -23,10 +23,11 @@ type Transaction = {
   merchant_net_amount: number | string | null;
 
   operation_detail?: {
-    card?: {
-      card_brand?: string | null;
-    } | null;
+  card?: {
+    card_brand?: string | null;
+    is_international_card?: boolean | null;
   } | null;
+} | null;
 };
 
 type Liquidation = {
@@ -277,15 +278,21 @@ function getPosCode(
 }
 
   function getCardBrand(
-    transaction: Transaction
-  ) {
-    return (
-      transaction
-        .operation_detail
-        ?.card
-        ?.card_brand || "-"
-    );
+  transaction: Transaction
+) {
+  const card =
+    transaction.operation_detail?.card;
+
+  const brand = card?.card_brand;
+
+  if (!brand) {
+    return "-";
   }
+
+  return card?.is_international_card
+    ? `${brand} (Internacional)`
+    : brand;
+}
 
   const totals = useMemo(() => {
     return transactions.reduce(

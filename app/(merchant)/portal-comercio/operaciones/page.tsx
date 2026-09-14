@@ -21,9 +21,10 @@ type Transaction = {
   merchant_net_amount: number | null;
 
     operation_detail: {
-    card?: {
+      card?: {
         card_brand?: string | null;
-    } | null;
+        is_international_card?: boolean | null;
+      } | null;
     } | null;
   currency: string | null;
   transaction_datetime: string | null;
@@ -211,10 +212,18 @@ function paymentMethodLabel(value: string | null) {
 }
 
 function getCardBrand(transaction: Transaction) {
-  return (
-    transaction.operation_detail?.card
-      ?.card_brand || "-"
-  );
+  const card =
+    transaction.operation_detail?.card;
+
+  const brand = card?.card_brand;
+
+  if (!brand) {
+    return "-";
+  }
+
+  return card?.is_international_card
+    ? `${brand} (Internacional)`
+    : brand;
 }
 
 function statusLabel(value: string | null) {
