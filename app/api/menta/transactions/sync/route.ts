@@ -120,26 +120,9 @@ function splitIntoChunks<T>(
   return chunks;
 }
 
-export async function POST() {
+async function syncMentaTransactions() {
   try {
-    const role = await getUserRole();
-
-    const allowedRoles = [
-      "admin",
-      "supervisor",
-      "operaciones",
-    ];
-
-    if (!role || !allowedRoles.includes(role)) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error:
-            "No tenés permisos para sincronizar operaciones con MENTA.",
-        },
-        { status: 403 }
-      );
-    }
+    
 
     const pageSize = 100;
 
@@ -538,4 +521,54 @@ const transactionsWithReferences =
       { status: 500 }
     );
   }
+}
+export async function POST() {
+  const role = await getUserRole();
+
+  const allowedRoles = [
+    "admin",
+    "supervisor",
+    "operaciones",
+  ];
+
+  if (!role || !allowedRoles.includes(role)) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "No tenés permisos para sincronizar operaciones con MENTA.",
+      },
+      { status: 403 }
+    );
+  }
+
+  return syncMentaTransactions();
+}
+
+export async function GET(
+  request: Request
+) {
+  const cronSecret =
+    process.env.CRON_SECRET;
+
+  const authorization =
+    request.headers.get(
+      "authorization"
+    );
+
+  if (
+    !cronSecret ||
+    authorization !==
+      `Bearer ${cronSecret}`
+  ) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "No autorizado.",
+      },
+      { status: 401 }
+    );
+  }
+
+  return syncMentaTransactions();
 }
