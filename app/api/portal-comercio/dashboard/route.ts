@@ -175,23 +175,47 @@ export async function GET() {
     // COMERCIOS
     // =========================
 
-    const merchantsQuery =
-      supabase
-        .from("merchants")
-        .select("id, name")
-        .in(
-          "id",
-          allowedMerchantIds
-        )
-        .order("name", {
-          ascending: true,
-        });
+const merchantsQuery =
+  supabase
+    .from("merchants")
+    .select(`
+      id,
+      name,
+      cuit,
+      address,
+      street,
+      street_number,
+      floor,
+      apartment,
+      postal_code,
+      city,
+      province
+    `)
+    .in(
+      "id",
+      allowedMerchantIds
+    )
+    .order("name", {
+      ascending: true,
+    });
 
     const groupQuery =
     access.merchant_group_id
       ? supabase
           .from("merchant_groups")
-          .select("id, name")
+          .select(`
+            id,
+            name,
+            cuit,
+            address,
+            street,
+            street_number,
+            floor,
+            apartment,
+            city,
+            province,
+            postal_code
+          `)
           .eq(
             "id",
             access.merchant_group_id
