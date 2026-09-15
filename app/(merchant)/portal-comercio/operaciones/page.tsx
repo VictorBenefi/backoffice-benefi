@@ -275,6 +275,9 @@ export default function OperacionesPage() {
   const [dateTo, setDateTo] = useState(today());
 
   const [merchantFilter, setMerchantFilter] =
+  useState("");
+
+  const [branchFilter, setBranchFilter] =
     useState("");
 
   const [posFilter, setPosFilter] = useState("");
@@ -366,14 +369,28 @@ useEffect(() => {
 }, [posDevices]);
 
 const filteredPosDevices = useMemo(() => {
-  if (!merchantFilter) {
-    return posDevices;
-  }
+  return posDevices.filter((pos) => {
+    if (
+      merchantFilter &&
+      pos.merchant_id !== merchantFilter
+    ) {
+      return false;
+    }
 
-  return posDevices.filter(
-    (pos) => pos.merchant_id === merchantFilter
-  );
-}, [posDevices, merchantFilter]);
+    if (
+      branchFilter &&
+      pos.merchant_branch_id !== branchFilter
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+}, [
+  posDevices,
+  merchantFilter,
+  branchFilter,
+]);
 
 const filteredTransactions = useMemo(() => {
     const searchText = search
@@ -413,6 +430,14 @@ const filteredTransactions = useMemo(() => {
         merchantFilter &&
         transaction.merchant_id_benefi !==
           merchantFilter
+      ) {
+        return false;
+      }
+
+      if (
+        branchFilter &&
+        transaction.merchant_branch_id_benefi !==
+          branchFilter
       ) {
         return false;
       }
@@ -493,6 +518,7 @@ const filteredTransactions = useMemo(() => {
     dateFrom,
     dateTo,
     merchantFilter,
+    branchFilter,
     posFilter,
     statusFilter,
     operationTypeFilter,
@@ -724,6 +750,7 @@ const handleExportExcel = () => {
     setDateFrom(today());
     setDateTo(today());
     setMerchantFilter("");
+    setBranchFilter("");
     setPosFilter("");
     setStatusFilter("");
     setPaymentFilter("");
@@ -731,7 +758,7 @@ const handleExportExcel = () => {
     setSearch("");
   };
 
-  useEffect(() => {
+useEffect(() => {
   if (!posFilter) {
     return;
   }
@@ -750,9 +777,18 @@ const handleExportExcel = () => {
     selectedPos.merchant_id !== merchantFilter
   ) {
     setPosFilter("");
+    return;
+  }
+
+  if (
+    branchFilter &&
+    selectedPos.merchant_branch_id !== branchFilter
+  ) {
+    setPosFilter("");
   }
 }, [
   merchantFilter,
+  branchFilter,
   posFilter,
   posDevices,
 ]);
@@ -884,6 +920,36 @@ const handleExportExcel = () => {
                   {merchant.name || "Sin nombre"}
                 </option>
               ))}
+            </select>
+          </FilterField>
+
+          <FilterField label="Sucursal">
+            <select
+              value={branchFilter}
+              onChange={(event) =>
+                setBranchFilter(event.target.value)
+              }
+              className={inputClass}
+            >
+              <option value="">
+                Todas las sucursales
+              </option>
+
+              {branches
+                .filter(
+                  (branch) =>
+                    !merchantFilter ||
+                    branch.merchant_id === merchantFilter
+                )
+                .map((branch) => (
+                  <option
+                    key={branch.id}
+                    value={branch.id}
+                  >
+                    {branch.branch_name ||
+                      `Sucursal ${branch.branch_number}`}
+                  </option>
+                ))}
             </select>
           </FilterField>
 
