@@ -25,6 +25,21 @@ type Transaction = {
   installments: number | null;
   financing: string | null;
   acquirer: string | null;
+
+  merchant_net_amount: number | null;
+  operation_detail: Record<string, unknown> | null;
+  tax_info: Record<string, unknown> | null;
+};
+
+type PaymentCostSetting = {
+  id: string;
+  payment_method: "QR" | "DEBIT" | "CREDIT";
+  acquirer_rate: number;
+  menta_rate: number;
+  panda_rate: number;
+  valid_from: string;
+  valid_to: string | null;
+  is_active: boolean;
 };
 
 type Merchant = {
@@ -174,6 +189,255 @@ function operationLabel(transaction: Transaction) {
   }
 }
 
+function getCardBrand(
+  operationDetail: Record<string, unknown> | null
+) {
+  if (!operationDetail) return null;
+
+  const card = operationDetail.card;
+
+  if (
+    !card ||
+    typeof card !== "object" ||
+    Array.isArray(card)
+  ) {
+    return null;
+  }
+
+  const cardData = card as Record<string, unknown>;
+
+  const brand =
+    typeof cardData.card_brand === "string"
+      ? cardData.card_brand
+      : null;
+
+  const isInternational =
+    cardData.is_international_card === true;
+
+  if (!brand) return null;
+
+  return isInternational
+    ? `${brand} (Internacional)`
+    : brand;
+}
+
+function getTaxRate(
+  taxInfo: Record<string, unknown> | null,
+  taxType: string
+) {
+  if (!taxInfo) return null;
+
+  const taxBreakdown = taxInfo.tax_breakdown;
+
+  if (!Array.isArray(taxBreakdown)) {
+    return null;
+  }
+
+  const item = taxBreakdown.find((entry) => {
+    if (
+      !entry ||
+      typeof entry !== "object" ||
+      Array.isArray(entry)
+    ) {
+      return false;
+    }
+
+    const data = entry as Record<string, unknown>;
+
+    return data.tax_code === taxType;
+  });
+
+  if (
+    !item ||
+    typeof item !== "object" ||
+    Array.isArray(item)
+  ) {
+    return null;
+  }
+
+  const data = item as Record<string, unknown>;
+  const rate = Number(data.rate);
+
+  return Number.isFinite(rate) ? rate : null;
+}
+
+function getMerchantRate(
+  transaction: Transaction
+) {
+  return getTaxRate(
+    transaction.tax_info,
+    "CUSTOMER_TO_MERCHANT_COMMISSION"
+  );
+}
+
+function getAcquirerRate(
+  transaction: Transaction
+) {
+  return getTaxRate(
+    transaction.tax_info,
+    "ACQUIRER_TO_CUSTOMER_COMMISSION"
+  );
+}
+
+function getPaymentCostSetting(
+  transaction: Transaction,
+  paymentCosts: PaymentCostSetting[]
+) {
+  const paymentMethod = normalize(
+    transaction.payment_method
+  );
+
+  if (!transaction.transaction_datetime) {
+    return null;
+  }
+
+  const transactionDate =
+    transaction.transaction_datetime.slice(0, 10);
+
+  return (
+    paymentCosts.find((setting) => {
+      if (
+        normalize(setting.payment_method) !==
+        paymentMethod
+      ) {
+        return false;
+      }
+
+      if (transactionDate < setting.valid_from) {
+        return false;
+      }
+
+      if (
+        setting.valid_to &&
+        transactionDate > setting.valid_to
+      ) {
+        return false;
+      }
+
+      return true;
+    }) || null
+  );
+}
+
+function getOperationRates(
+  transaction: Transaction,
+  paymentCosts: PaymentCostSetting[]
+) {
+  const paymentMethod = normalize(
+    transaction.payment_method
+  );
+
+  const setting = getPaymentCostSetting(
+    transaction,
+    paymentCosts
+  );
+
+  if (!setting) {
+    return null;
+  }
+
+  const grossAmount = Number(
+    transaction.gross_amount || 0
+  );
+
+  const merchantNetAmount = Number(
+    transaction.merchant_net_amount || 0
+  );
+
+  if (
+    paymentMethod === "QR" &&
+    Math.abs(grossAmount - merchantNetAmount) <= 0.01
+  ) {
+    return {
+      merchantRate: 0,
+      acquirerRate: 0,
+      mentaRate: 0,
+      pandaRate: 0,
+    };
+  }
+
+  const merchantRate =
+    getMerchantRate(transaction) ?? 0;
+
+  const acquirerRate =
+    paymentMethod === "QR"
+      ? Number(setting.acquirer_rate || 0)
+      : getAcquirerRate(transaction) ??
+        Number(setting.acquirer_rate || 0);
+
+  return {
+    merchantRate,
+    acquirerRate,
+    mentaRate: Number(setting.menta_rate || 0),
+    pandaRate: Number(setting.panda_rate || 0),
+  };
+}
+
+function getOperationEconomics(
+  transaction: Transaction,
+  paymentCosts: PaymentCostSetting[]
+) {
+  const isApproved =
+  normalize(transaction.status) === "APPROVED";
+
+  const isCancellation =
+    isRefundOrCancellation(transaction);
+
+  if (!isApproved || isCancellation) {
+    return {
+      merchantRate: 0,
+      acquirerRate: 0,
+      mentaRate: 0,
+      pandaRate: 0,
+      merchantFee: 0,
+      acquirerCost: 0,
+      mentaCost: 0,
+      pandaCost: 0,
+      benefiProfit: 0,
+    };
+  }
+
+  const rates = getOperationRates(
+    transaction,
+    paymentCosts
+  );
+
+  if (!rates) {
+    return null;
+  }
+
+  const grossAmount = Number(
+    transaction.gross_amount || 0
+  );
+
+  const merchantFee =
+    grossAmount * (rates.merchantRate / 100);
+
+  const acquirerCost =
+    grossAmount * (rates.acquirerRate / 100);
+
+  const mentaCost =
+    grossAmount * (rates.mentaRate / 100);
+
+  const pandaCost =
+    grossAmount * (rates.pandaRate / 100);
+
+  const benefiProfit =
+    merchantFee -
+    acquirerCost -
+    mentaCost -
+    pandaCost;
+
+  return {
+    ...rates,
+    merchantFee,
+    acquirerCost,
+    mentaCost,
+    pandaCost,
+    benefiProfit,
+  };
+}
+
 function paymentMethodLabel(value: string | null) {
   switch (normalize(value)) {
     case "CREDIT":
@@ -224,6 +488,10 @@ export default function OperacionesPage() {
 
   const [posDevices, setPosDevices] = useState<
     PosDevice[]
+  >([]);
+
+  const [paymentCosts, setPaymentCosts] = useState<
+    PaymentCostSetting[]
   >([]);
 
   const [loading, setLoading] = useState(true);
@@ -290,6 +558,10 @@ setBranches(
 
 setPosDevices(
   (data.posDevices || []) as PosDevice[]
+);
+
+setPaymentCosts(
+  (data.paymentCosts || []) as PaymentCostSetting[]
 );
     } catch (error) {
       console.error(
@@ -1108,6 +1380,26 @@ useEffect(() => {
                       Importe
                     </th>
 
+                    <th className="px-4 py-3 text-right">
+                      Arancel comercio
+                    </th>
+
+                    <th className="px-4 py-3 text-right">
+                      Adquirente
+                    </th>
+
+                    <th className="px-4 py-3 text-right">
+                      MENTA
+                    </th>
+
+                    <th className="px-4 py-3 text-right">
+                      Panda
+                    </th>
+
+                    <th className="px-4 py-3 text-right">
+                      Rentabilidad BENEFÍ
+                    </th>
+
                     <th className="px-4 py-3">
                       Estado
                     </th>
@@ -1120,6 +1412,7 @@ useEffect(() => {
                       <OperationRow
                         key={transaction.id}
                         transaction={transaction}
+                        paymentCosts={paymentCosts}
                         merchant={
                           transaction.merchant_id_benefi
                             ? merchantMap.get(
@@ -1240,11 +1533,13 @@ function OperationRow({
   merchant,
   branch,
   pos,
+  paymentCosts,
 }: {
   transaction: Transaction;
   merchant: Merchant | null;
   branch: MerchantBranch | null;
   pos: PosDevice | null;
+  paymentCosts: PaymentCostSetting[];
 }) {
   const refund =
     isRefundOrCancellation(transaction);
@@ -1295,9 +1590,17 @@ function OperationRow({
         </p>
       </td>
 
-      <td className="px-4 py-3 text-slate-700">
-        {paymentMethodLabel(
-          transaction.payment_method
+      <td className="px-4 py-3">
+        <p className="text-slate-700">
+          {paymentMethodLabel(
+            transaction.payment_method
+          )}
+        </p>
+
+        {getCardBrand(transaction.operation_detail) && (
+          <p className="mt-0.5 text-xs text-slate-500">
+            {getCardBrand(transaction.operation_detail)}
+          </p>
         )}
       </td>
 
@@ -1316,6 +1619,176 @@ function OperationRow({
           Number(transaction.gross_amount || 0),
           transaction.currency || "ARS"
         )}
+      </td>
+
+      {/* Arancel comercio */}
+      <td className="whitespace-nowrap px-4 py-3 text-right">
+        {(() => {
+          const economics = getOperationEconomics(
+            transaction,
+            paymentCosts
+          );
+
+          if (!economics) {
+            return (
+              <span className="text-slate-400">
+                —
+              </span>
+            );
+          }
+
+          return (
+            <>
+              <p className="font-semibold text-slate-800">
+                {formatMoney(
+                  economics.merchantFee,
+                  transaction.currency || "ARS"
+                )}
+              </p>
+
+              <p className="mt-0.5 text-xs text-slate-500">
+                {economics.merchantRate.toFixed(2)}%
+              </p>
+            </>
+          );
+        })()}
+      </td>
+
+      {/* Adquirente */}
+      <td className="whitespace-nowrap px-4 py-3 text-right">
+        {(() => {
+          const economics = getOperationEconomics(
+            transaction,
+            paymentCosts
+          );
+
+          if (!economics) {
+            return (
+              <span className="text-slate-400">
+                —
+              </span>
+            );
+          }
+
+          return (
+            <>
+              <p className="font-semibold text-slate-800">
+                {formatMoney(
+                  economics.acquirerCost,
+                  transaction.currency || "ARS"
+                )}
+              </p>
+
+              <p className="mt-0.5 text-xs text-slate-500">
+                {economics.acquirerRate.toFixed(2)}%
+              </p>
+            </>
+          );
+        })()}
+      </td>
+
+            {/* MENTA */}
+            <td className="whitespace-nowrap px-4 py-3 text-right">
+              {(() => {
+                const economics = getOperationEconomics(
+                  transaction,
+                  paymentCosts
+                );
+
+                if (!economics) {
+                  return (
+                    <span className="text-slate-400">
+                      —
+                    </span>
+                  );
+                }
+
+                return (
+                  <>
+                    <p className="font-semibold text-slate-800">
+                      {formatMoney(
+                        economics.mentaCost,
+                        transaction.currency || "ARS"
+                      )}
+                    </p>
+
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {economics.mentaRate.toFixed(2)}%
+                    </p>
+                  </>
+                );
+              })()}
+            </td>
+            {/* Panda */}
+      <td className="whitespace-nowrap px-4 py-3 text-right">
+        {(() => {
+          const economics = getOperationEconomics(
+            transaction,
+            paymentCosts
+          );
+
+          if (!economics) {
+            return (
+              <span className="text-slate-400">
+                —
+              </span>
+            );
+          }
+
+          return (
+            <>
+              <p className="font-semibold text-slate-800">
+                {formatMoney(
+                  economics.pandaCost,
+                  transaction.currency || "ARS"
+                )}
+              </p>
+
+              <p className="mt-0.5 text-xs text-slate-500">
+                {economics.pandaRate.toFixed(2)}%
+              </p>
+            </>
+          );
+        })()}
+      </td>
+
+      {/* Rentabilidad BENEFÍ */}
+      <td className="whitespace-nowrap px-4 py-3 text-right">
+        {(() => {
+          const economics = getOperationEconomics(
+            transaction,
+            paymentCosts
+          );
+
+          if (!economics) {
+            return (
+              <span className="text-slate-400">
+                —
+              </span>
+            );
+          }
+
+          const benefiRate =
+            economics.merchantRate -
+            economics.acquirerRate -
+            economics.mentaRate -
+            economics.pandaRate;
+
+          return (
+            <>
+              <p className="font-semibold text-emerald-700">
+                {formatMoney(
+                  economics.benefiProfit,
+                  transaction.currency || "ARS"
+                )}
+              </p>
+
+              <p className="mt-0.5 text-xs text-slate-500">
+                {benefiRate.toFixed(2)}%
+              </p>
+            </>
+          );
+        })()}
       </td>
 
       <td className="px-4 py-3">
@@ -1366,9 +1839,17 @@ function OperationCard({
 
         <MobileDetail
           label="Medio"
-          value={paymentMethodLabel(
-            transaction.payment_method
-          )}
+          value={
+            getCardBrand(transaction.operation_detail)
+              ? `${paymentMethodLabel(
+                  transaction.payment_method
+                )} · ${getCardBrand(
+                  transaction.operation_detail
+                )}`
+              : paymentMethodLabel(
+                  transaction.payment_method
+                )
+          }
         />
 
         <MobileDetail

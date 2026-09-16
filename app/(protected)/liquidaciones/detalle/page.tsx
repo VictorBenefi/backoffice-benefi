@@ -58,6 +58,17 @@ type Liquidation = {
   merchant_net_amount: number;
 
   reconciliation_difference: number;
+    benefi_economics: {
+    merchant_fee: number;
+    acquirer_cost: number;
+    menta_cost: number;
+    panda_cost: number;
+    benefi_profit: number;
+    expected_transfer: number;
+    expected_transfer_panda: number;
+    expected_transfer_menta: number;
+    menta_credit: number;
+  };
 };
 
 type PosDevice = {
@@ -1814,6 +1825,126 @@ const accreditationSummary =
             )}
           </div>
         </div>
+        {/* DESGLOSE DE LIQUIDACIÓN BENEFÍ */}
+<div className="rounded-xl border border-slate-200 bg-white p-4">
+  <div className="mb-4">
+    <h2 className="font-semibold text-slate-950">
+      Desglose de Liquidación BENEFÍ
+    </h2>
+
+    <p className="mt-1 text-sm text-slate-500">
+      Detalle de costos y rentabilidad de BENEFÍ
+      para esta liquidación.
+    </p>
+  </div>
+
+  <div className="divide-y divide-slate-100">
+    <LiquidationConcept
+      label="Arancel comercio"
+      value={
+        liquidation.benefi_economics
+          ?.merchant_fee || 0
+      }
+    />
+
+    <LiquidationConcept
+      label="Costo adquirente"
+      value={
+        liquidation.benefi_economics
+          ?.acquirer_cost || 0
+      }
+      negative
+    />
+
+    <LiquidationConcept
+      label="Costo MENTA"
+      value={
+        liquidation.benefi_economics
+          ?.menta_cost || 0
+      }
+      negative
+    />
+
+    <LiquidationConcept
+      label="Costo Panda"
+      value={
+        liquidation.benefi_economics
+          ?.panda_cost || 0
+      }
+      negative
+    />
+
+    <div className="flex items-center justify-between gap-4 pt-4">
+      <div>
+        <p className="font-semibold text-slate-950">
+          Rentabilidad BENEFÍ
+        </p>
+
+        <p className="mt-1 text-xs text-slate-500">
+          Resultado neto de costos de procesamiento
+        </p>
+      </div>
+
+      <p className="text-xl font-bold text-slate-950">
+        {formatMoney(
+          liquidation.benefi_economics
+            ?.benefi_profit || 0
+        )}
+      </p>
+    </div>
+
+    <div className="flex items-center justify-between gap-4 border-t border-slate-100 pt-4">
+      <div>
+        <p className="font-semibold text-slate-950">
+          Monto esperado a recibir BENEFÍ
+        </p>
+
+        <p className="mt-1 text-xs text-slate-500">
+          {liquidation.benefi_economics
+            ?.expected_transfer_panda > 0 &&
+          liquidation.benefi_economics
+            ?.expected_transfer_menta > 0
+            ? "Pagadores: PANDA + MENTA"
+            : liquidation.benefi_economics
+                ?.expected_transfer_panda > 0
+              ? "Pagador: PANDA"
+              : liquidation.benefi_economics
+                  ?.expected_transfer_menta > 0
+                ? "Pagador: MENTA"
+                : "Sin importe pendiente de transferencia"}
+        </p>
+      </div>
+
+      <p className="text-xl font-bold text-slate-950">
+        {formatMoney(
+          liquidation.benefi_economics
+            ?.expected_transfer || 0
+        )}
+      </p>
+    </div>   
+    {liquidation.benefi_economics?.menta_credit > 0 && (
+      <div className="mt-4 border-t border-slate-200 pt-4">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">
+              Crédito BENEFÍ generado en MENTA
+            </p>
+
+            <p className="mt-1 text-xs text-slate-500">
+              Crédito generado por operaciones QR
+            </p>
+          </div>
+
+          <p className="text-lg font-bold text-emerald-700">
+            {formatMoney(
+              liquidation.benefi_economics.menta_credit
+            )}
+          </p>
+        </div>
+      </div>
+    )}
+  </div>
+</div>
 
 {/* ACREDITACIONES */}
 <div className="rounded-xl border border-slate-200 bg-white p-4">

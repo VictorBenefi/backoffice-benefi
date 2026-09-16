@@ -1,5 +1,6 @@
 "use client";
 
+import * as XLSX from "xlsx";
 import {
   useCallback,
   useEffect,
@@ -14,6 +15,7 @@ type Liquidation = {
   operation_count: number | string;
   pos_count: number | string;
   pos_codes: string | null;
+  
 
   gross_amount: number | string | null;
 
@@ -51,6 +53,25 @@ type Liquidation = {
     | number
     | string
     | null;
+
+    benefi_economics: {
+    merchant_fee: number;
+    acquirer_cost: number;
+    menta_cost: number;
+    panda_cost: number;
+    benefi_profit: number;
+  };
+};
+
+type PaymentCostSetting = {
+  id: string;
+  payment_method: "QR" | "DEBIT" | "CREDIT";
+  acquirer_rate: number;
+  menta_rate: number;
+  panda_rate: number;
+  valid_from: string;
+  valid_to: string | null;
+  is_active: boolean;
 };
 
 type Merchant = {
@@ -149,6 +170,10 @@ export default function LiquidacionesPage() {
     MerchantBranch[]
   >([]);
 
+  const [paymentCosts, setPaymentCosts] = useState<
+    PaymentCostSetting[]
+  >([]);
+
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -166,10 +191,28 @@ export default function LiquidacionesPage() {
   const [branchFilter, setBranchFilter] =
   useState("");
 
+  const [showBenefiReport, setShowBenefiReport] =
+  useState(false);
+
+  const [
+  downloadingBenefiReport,
+  setDownloadingBenefiReport,
+] = useState(false);
+
+  const [benefiReportMonth, setBenefiReportMonth] =
+  useState(() => {
+    const now = new Date();
+
+    return `${now.getFullYear()}-${String(
+      now.getMonth() + 1
+    ).padStart(2, "0")}`;
+  });
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setMessage("");
 
+  
     try {
       const response = await fetch(
         "/api/liquidaciones",
@@ -198,6 +241,10 @@ export default function LiquidacionesPage() {
 
       setBranches(
         (data.branches || []) as MerchantBranch[]
+      );
+
+      setPaymentCosts(
+        (data.paymentCosts || []) as PaymentCostSetting[]
       );
 
     } catch (error) {
@@ -362,19 +409,271 @@ export default function LiquidacionesPage() {
     setBranchFilter("");
   };
 
+  async function downloadBenefiReport() {
+  try {
+    setDownloadingBenefiReport(true);
+
+    const response = await fetch(
+      `/api/liquidaciones/informe-benefi?month=${benefiReportMonth}`,
+      {
+        method: "GET",
+        cache: "no-store",
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error ||
+          "No se pudo generar el informe BENEFÍ"
+      );
+    }
+
+    const workbook =
+    XLSX.utils.book_new();
+
+  const summaryRows = [
+    ["INFORME MENSUAL BENEFÍ", ""],
+    ["Período", benefiReportMonth],
+    ["", ""],
+
+    ["RESUMEN GENERAL", ""],
+
+    [
+      "Operaciones",
+      data.totals.operation_count,
+    ],
+    [
+      "Importe bruto",
+      data.totals.gross_amount,
+    ],
+    [
+      "Neto a comercios",
+      data.totals.merchant_net_amount,
+    ],
+    [
+      "Arancel comercio",
+      data.totals.merchant_fee,
+    ],
+    [
+      "Costo adquirente",
+      data.totals.acquirer_cost,
+    ],
+    [
+      "Costo MENTA",
+      data.totals.menta_cost,
+    ],
+    [
+      "Costo PANDA",
+      data.totals.panda_cost,
+    ],
+    [
+      "Rentabilidad BENEFÍ",
+      data.totals.benefi_profit,
+    ],
+    ["", ""],
+
+    ["CIRCUITO DE FONDOS", ""],
+
+    [
+      "Monto esperado a recibir de PANDA",
+      data.totals.expected_transfer_panda,
+    ],
+    [
+      "Crédito BENEFÍ generado en MENTA",
+      data.totals.menta_credit,
+    ],
+  ];
+
+  const summarySheet =
+    XLSX.utils.aoa_to_sheet(
+      summaryRows
+    );
+
+  summarySheet["!cols"] = [
+    { wch: 38 },
+    { wch: 22 },
+  ];
+
+  [
+  "B6",
+  "B7",
+  "B8",
+  "B9",
+  "B10",
+  "B11",
+  "B12",
+  "B15",
+  "B16",
+].forEach((cell) => {
+  if (summarySheet[cell]) {
+    summarySheet[cell].z =
+      '$ #,##0.00';
+  }
+});
+
+  XLSX.utils.book_append_sheet(
+    workbook,
+    summarySheet,
+    "Resumen BENEFÍ"
+  );
+
+  const liquidationRows =
+  data.liquidations.map(
+    (item: {
+      payment_date: string;
+      merchant_name: string;
+      operation_count: number;
+      gross_amount: number;
+      merchant_net_amount: number;
+      merchant_fee: number;
+      acquirer_cost: number;
+      menta_cost: number;
+      panda_cost: number;
+      benefi_profit: number;
+      expected_transfer_panda: number;
+      menta_credit: number;
+    }) => ({
+      "Fecha liquidación":
+        item.payment_date,
+
+      Comercio:
+        item.merchant_name,
+
+      Operaciones:
+        item.operation_count,
+
+      Bruto:
+        item.gross_amount,
+
+      "Neto comercio":
+        item.merchant_net_amount,
+
+      "Arancel comercio":
+        item.merchant_fee,
+
+      "Costo adquirente":
+        item.acquirer_cost,
+
+      "Costo MENTA":
+        item.menta_cost,
+
+      "Costo PANDA":
+        item.panda_cost,
+
+      "Rentabilidad BENEFÍ":
+        item.benefi_profit,
+
+      "A recibir de PANDA":
+        item.expected_transfer_panda,
+
+      "Crédito generado en MENTA":
+        item.menta_credit,
+    })
+  );
+
+const liquidationsSheet =
+  XLSX.utils.json_to_sheet(
+    liquidationRows
+  );
+
+liquidationsSheet["!cols"] = [
+  { wch: 18 },
+  { wch: 28 },
+  { wch: 14 },
+  { wch: 18 },
+  { wch: 18 },
+  { wch: 18 },
+  { wch: 18 },
+  { wch: 18 },
+  { wch: 18 },
+  { wch: 20 },
+  { wch: 22 },
+  { wch: 26 },
+];
+
+for (
+  let row = 2;
+  row <= liquidationRows.length + 1;
+  row++
+) {
+  [
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K",
+    "L",
+  ].forEach((column) => {
+    const cell =
+      liquidationsSheet[
+        `${column}${row}`
+      ];
+
+    if (cell) {
+      cell.z = '$ #,##0.00';
+    }
+  });
+}
+
+XLSX.utils.book_append_sheet(
+  workbook,
+  liquidationsSheet,
+  "Liquidaciones"
+);
+
+  XLSX.writeFile(
+    workbook,
+    `Informe_BENEFI_${benefiReportMonth}.xlsx`
+  );
+
+  setShowBenefiReport(false);
+
+  } catch (error) {
+    console.error(
+      "Error downloading BENEFÍ report:",
+      error
+    );
+
+    alert(
+      error instanceof Error
+        ? error.message
+        : "No se pudo generar el informe BENEFÍ"
+    );
+  } finally {
+    setDownloadingBenefiReport(false);
+  }
+}
+
   return (
     <main className="min-h-screen min-w-0 overflow-x-hidden bg-slate-50 p-4 md:p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-950 md:text-3xl">
-          Liquidaciones
-        </h1>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-950 md:text-3xl">
+              Liquidaciones
+            </h1>
 
-        <p className="mt-1 text-sm leading-6 text-slate-500">
-          Consulta y seguimiento de las
-          acreditaciones correspondientes a las
-          operaciones procesadas mediante los POS
-          BENEFÍ.
-        </p>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              Consulta y seguimiento de las
+              acreditaciones correspondientes a las
+              operaciones procesadas mediante los POS
+              BENEFÍ.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowBenefiReport(true)}
+            className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+          >
+            Informe BENEFÍ
+          </button>
+        </div>
       </div>
 
       {message && (
@@ -594,6 +893,26 @@ export default function LiquidacionesPage() {
                       Neto
                     </th>
 
+                    <th className="px-4 py-3 text-right">
+                      Arancel comercio
+                    </th>
+
+                    <th className="px-4 py-3 text-right">
+                      Adquirente
+                    </th>
+
+                    <th className="px-4 py-3 text-right">
+                      MENTA
+                    </th>
+
+                    <th className="px-4 py-3 text-right">
+                      Panda
+                    </th>
+
+                    <th className="px-4 py-3 text-right">
+                      Rentabilidad BENEFÍ
+                    </th>
+
                     <th className="px-4 py-3 text-center font-semibold">
                       Conciliación
                     </th>
@@ -667,17 +986,47 @@ export default function LiquidacionesPage() {
                         </div>
                         </td>
 
-                          <td className="px-4 py-3 text-right font-medium">
-                            {formatMoney(
-                              item.gross_amount
-                            )}
-                          </td>
+                         <td className="px-4 py-3 text-right font-medium">
+                          {formatMoney(
+                            item.gross_amount
+                          )}
+                        </td>
 
-                          <td className="px-4 py-3 text-right font-bold text-slate-950">
-                            {formatMoney(
-                              item.merchant_net_amount
-                            )}
-                          </td>
+                        <td className="px-4 py-3 text-right font-bold text-slate-950">
+                          {formatMoney(
+                            item.merchant_net_amount
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3 text-right">
+                          {formatMoney(
+                            item.benefi_economics?.merchant_fee || 0
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3 text-right">
+                          {formatMoney(
+                            item.benefi_economics?.acquirer_cost || 0
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3 text-right">
+                          {formatMoney(
+                            item.benefi_economics?.menta_cost || 0
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3 text-right">
+                          {formatMoney(
+                            item.benefi_economics?.panda_cost || 0
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3 text-right font-semibold">
+                          {formatMoney(
+                            item.benefi_economics?.benefi_profit || 0
+                          )}
+                        </td>
 
                         <td className="px-4 py-3 text-center">
                           {isReconciled(
@@ -837,10 +1186,78 @@ export default function LiquidacionesPage() {
             </div>
           </>
         )}
-      </section>
-    </main>
-  );
-}
+            </section>
+
+            {showBenefiReport && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-950">
+                        Informe BENEFÍ
+                      </h2>
+
+                      <p className="mt-1 text-sm text-slate-500">
+                        Seleccioná el período del informe mensual.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowBenefiReport(false)
+                      }
+                      className="text-xl text-slate-400 hover:text-slate-700"
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <div className="mt-6">
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Mes
+                    </label>
+
+                    <input
+                      type="month"
+                      value={benefiReportMonth}
+                      onChange={(event) =>
+                        setBenefiReportMonth(
+                          event.target.value
+                        )
+                      }
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div className="mt-6 flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowBenefiReport(false)
+                      }
+                      className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Cancelar
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={downloadBenefiReport}
+                      disabled={downloadingBenefiReport}
+                      className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {downloadingBenefiReport
+                        ? "Preparando..."
+                        : "Descargar Excel"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </main>
+        );
+      }
 
 function MetricCard({
   title,

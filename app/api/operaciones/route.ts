@@ -33,6 +33,7 @@ export async function GET() {
       merchantsResult,
       branchesResult,
       posResult,
+      paymentCostsResult,
     ] = await Promise.all([
       supabase
         .from("menta_transactions")
@@ -53,7 +54,10 @@ export async function GET() {
           status,
           installments,
           financing,
-          acquirer
+          acquirer,
+          merchant_net_amount,
+          operation_detail,
+          tax_info
         `)
         .order("transaction_datetime", {
           ascending: false,
@@ -76,13 +80,29 @@ export async function GET() {
         }),
 
       supabase
-        .from("pos_devices")
-        .select(
-          "id, code, serial, merchant_reference, merchant_id, merchant_branch_id"
-        )
-        .order("code", {
-            ascending: true,
-        }),
+      .from("pos_devices")
+      .select(
+        "id, code, serial, merchant_reference, merchant_id, merchant_branch_id"
+      )
+      .order("code", {
+        ascending: true,
+      }),
+
+    supabase
+      .from("benefi_payment_cost_settings")
+      .select(`
+        id,
+        payment_method,
+        acquirer_rate,
+        menta_rate,
+        panda_rate,
+        valid_from,
+        valid_to,
+        is_active
+      `)
+      .order("valid_from", {
+        ascending: false,
+      }),
     ]);
 
     if (transactionsResult.error) {
@@ -109,6 +129,12 @@ export async function GET() {
       );
     }
 
+    if (paymentCostsResult.error) {
+      throw new Error(
+        `Costos de pagos: ${paymentCostsResult.error.message}`
+      );
+    }
+
     return NextResponse.json({
       ok: true,
 
@@ -123,6 +149,9 @@ export async function GET() {
 
       posDevices:
         posResult.data || [],
+
+      paymentCosts:
+        paymentCostsResult.data || [],
     });
   } catch (error) {
     console.error(
