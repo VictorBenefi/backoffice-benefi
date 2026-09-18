@@ -72,6 +72,8 @@ type SyncResponse = {
     total_elements_menta?: number | null;
     total_pages_menta?: number;
     synced?: number;
+    new_operations?: number;
+    changed_operations?: number;
     without_pos?: number;
     skipped?: number;
     errors?: number;
@@ -524,16 +526,25 @@ export default function OperacionesPage() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    setMessage("");
 
     try {
-      const response = await fetch(
-  "/api/operaciones",
-  {
-    method: "GET",
-    cache: "no-store",
-  }
-);
+    const params = new URLSearchParams();
+
+    if (dateFrom) {
+      params.set("dateFrom", dateFrom);
+    }
+
+    if (dateTo) {
+      params.set("dateTo", dateTo);
+    }
+
+    const response = await fetch(
+      `/api/operaciones?${params.toString()}`,
+      {
+        method: "GET",
+        cache: "no-store",
+      }
+    );
 
 const data = await response.json();
 
@@ -577,7 +588,7 @@ setPaymentCosts(
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [dateFrom, dateTo]);
 
 useEffect(() => {
     loadData();
@@ -972,10 +983,19 @@ const filteredTransactions = useMemo(() => {
 
       const synced = data.summary?.synced ?? 0;
 
+      const newOperations =
+        data.summary?.new_operations ?? 0;
+
+      const changedOperations =
+        data.summary?.changed_operations ?? 0;
+
       setLastSync(new Date());
 
       setMessage(
-        `Sincronización completada. MENTA informó ${received} operaciones y ${synced} fueron procesadas correctamente.`
+        `Sincronización completada. MENTA informó ${received} operaciones, ${synced} fueron actualizadas, ${newOperations} son nuevas, ${changedOperations} tenían cambios reales, ${Math.max(
+          received - synced,
+          0
+        )} quedaron sin cambios, ${data.summary?.total_pages_menta ?? 0} páginas consultadas.`
       );
 
       await loadData();

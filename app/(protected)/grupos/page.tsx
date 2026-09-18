@@ -11,6 +11,7 @@ type MerchantGroup = {
   name: string;
   legal_name: string | null;
   cuit: string | null;
+  is_partner: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -20,12 +21,14 @@ type FormData = {
   name: string;
   legal_name: string;
   cuit: string;
+  is_partner: boolean;
 };
 
 const emptyForm: FormData = {
   name: "",
   legal_name: "",
   cuit: "",
+  is_partner: false,
 };
 
 export default function GruposPage() {
@@ -114,6 +117,8 @@ export default function GruposPage() {
       legal_name:
         group.legal_name || "",
       cuit: group.cuit || "",
+      is_partner:
+        group.is_partner || false,
     });
 
     setMessage("");
@@ -126,7 +131,7 @@ export default function GruposPage() {
 
   const handleSubmit = async (
     event: React.FormEvent
-  ) => {
+   ) => {
     event.preventDefault();
 
     if (!formData.name.trim()) {
@@ -164,6 +169,8 @@ export default function GruposPage() {
             legal_name:
               formData.legal_name,
             cuit: formData.cuit,
+            is_partner:
+              formData.is_partner,
           }),
         }
       );
@@ -372,6 +379,34 @@ export default function GruposPage() {
                 placeholder="30-12345678-9"
               />
             </Field>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={formData.is_partner}
+                  onChange={(event) =>
+                    setFormData((previous) => ({
+                      ...previous,
+                      is_partner:
+                        event.target.checked,
+                    }))
+                  }
+                  className="mt-1 h-4 w-4 rounded border-slate-300"
+                />
+
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">
+                    Este grupo es Partner
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    Permite configurar comisiones sobre las operaciones
+                    de los comercios pertenecientes al grupo.
+                  </p>
+                </div>
+              </label>
+            </div>
 
             <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-4">
               <button

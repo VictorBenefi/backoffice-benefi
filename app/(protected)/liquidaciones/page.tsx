@@ -214,8 +214,18 @@ export default function LiquidacionesPage() {
 
   
     try {
+      const params = new URLSearchParams();
+
+      if (dateFrom) {
+        params.set("dateFrom", dateFrom);
+      }
+
+      if (dateTo) {
+        params.set("dateTo", dateTo);
+      }
+
       const response = await fetch(
-        "/api/liquidaciones",
+        `/api/liquidaciones?${params.toString()}`,
         {
           method: "GET",
           cache: "no-store",
@@ -261,7 +271,7 @@ export default function LiquidacionesPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [dateFrom, dateTo]);
 
   useEffect(() => {
     loadData();

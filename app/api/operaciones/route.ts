@@ -7,8 +7,16 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+
+    const { searchParams } = new URL(request.url);
+
+    const dateFrom =
+      searchParams.get("dateFrom");
+
+    const dateTo =
+      searchParams.get("dateTo");
     const role = await getUserRole();
 
     const allowedRoles = [
@@ -59,9 +67,22 @@ export async function GET() {
           operation_detail,
           tax_info
         `)
+        .gte(
+          "transaction_datetime",
+          dateFrom
+            ? `${dateFrom}T00:00:00`
+            : "1970-01-01T00:00:00"
+        )
+        .lte(
+          "transaction_datetime",
+          dateTo
+            ? `${dateTo}T23:59:59.999`
+            : "2999-12-31T23:59:59.999"
+        )
         .order("transaction_datetime", {
           ascending: false,
-        }),
+        })
+        .limit(500),
 
       supabase
         .from("merchants")

@@ -25,6 +25,7 @@ export async function GET() {
         legal_name,
         cuit,
         is_active,
+        is_partner,
         created_at,
         updated_at
       `)
@@ -92,6 +93,8 @@ export async function POST(
             body.cuit || ""
           ).trim() || null,
         is_active: true,
+        is_partner:
+          body.is_partner === true,
       })
       .select(`
         id,
@@ -99,6 +102,7 @@ export async function POST(
         legal_name,
         cuit,
         is_active,
+        is_partner,
         created_at,
         updated_at
       `)
@@ -155,6 +159,7 @@ export async function PATCH(
       legal_name?: string | null;
       cuit?: string | null;
       is_active?: boolean;
+      is_partner?: boolean;
       updated_at: string;
     } = {
       updated_at:
@@ -203,6 +208,14 @@ export async function PATCH(
         body.is_active;
     }
 
+    if (
+      typeof body.is_partner ===
+      "boolean"
+    ) {
+      updates.is_partner =
+        body.is_partner;
+    }
+
     const { data, error } =
       await supabaseAdmin
         .from("merchant_groups")
@@ -214,6 +227,7 @@ export async function PATCH(
           legal_name,
           cuit,
           is_active,
+          is_partner,
           created_at,
           updated_at
         `)

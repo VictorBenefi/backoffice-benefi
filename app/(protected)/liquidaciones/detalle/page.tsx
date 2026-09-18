@@ -1918,7 +1918,7 @@ const accreditationSummary =
       <p className="text-xl font-bold text-slate-950">
         {formatMoney(
           liquidation.benefi_economics
-            ?.expected_transfer || 0
+            ?.expected_transfer_panda || 0
         )}
       </p>
     </div>   

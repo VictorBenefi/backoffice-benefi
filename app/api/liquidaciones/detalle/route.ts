@@ -182,22 +182,6 @@ function getTransactionEconomics(
     .trim()
     .toUpperCase();
 
-  if (
-    operationType.includes("CANCEL") ||
-    operationType.includes("REFUND") ||
-    operationType.includes("VOID")
-  ) {
-    return {
-      merchantFee: 0,
-      acquirerCost: 0,
-      mentaCost: 0,
-      pandaCost: 0,
-      benefiProfit: 0,
-      benefiExpectedTransfer: 0,
-      benefiPayer: null,
-      benefiMentaCredit: 0,
-    };
-  }
 
   const setting = getPaymentCostSetting(
     transaction.payment_method,
@@ -254,19 +238,25 @@ function getTransactionEconomics(
   }
 
   const merchantRate =
-    getTaxRate(
-      transaction.tax_info,
-      "CUSTOMER_TO_MERCHANT_COMMISSION"
-    ) ?? 0;
+    Math.abs(
+      getTaxRate(
+        transaction.tax_info,
+        "CUSTOMER_TO_MERCHANT_COMMISSION"
+      ) ?? 0
+    );
 
   const acquirerRate =
-    paymentMethod === "QR"
-      ? Number(setting.acquirer_rate || 0)
-      : getTaxRate(
+  paymentMethod === "QR"
+    ? Math.abs(
+        Number(setting.acquirer_rate || 0)
+      )
+    : Math.abs(
+        getTaxRate(
           transaction.tax_info,
           "ACQUIRER_TO_CUSTOMER_COMMISSION"
         ) ??
-        Number(setting.acquirer_rate || 0);
+          Number(setting.acquirer_rate || 0)
+      );
 
   const mentaRate = Number(
     setting.menta_rate || 0
@@ -313,27 +303,20 @@ function getTransactionEconomics(
       )
     : 0;
 
-    const pandaVat =
-      pandaCost * 0.21;
-
     const benefiExpectedTransfer =
-      paymentMethod === "CREDIT" ||
-      paymentMethod === "DEBIT"
-        ? Math.max(
-            0,
-            customerNetAmount -
-              merchantNetAmount! -
-              pandaCost -
-              pandaVat
-          )
-        : 0;
-    const benefiPayer =
     paymentMethod === "CREDIT" ||
     paymentMethod === "DEBIT"
-      ? "PANDA"
-      : paymentMethod === "QR"
-        ? "MENTA"
-        : null;
+      ? merchantFee -
+        acquirerCost -
+        pandaCost
+      : 0;
+      const benefiPayer =
+      paymentMethod === "CREDIT" ||
+      paymentMethod === "DEBIT"
+        ? "PANDA"
+        : paymentMethod === "QR"
+          ? "MENTA"
+          : null;
 
   return {
     merchantFee,
@@ -535,10 +518,7 @@ export async function GET(request: NextRequest) {
             "merchant_branch_id",
             branchId
           )
-          .is(
-            "merchant_branch_id",
-            null
-          )
+          
       : supabase
           .from("pos_devices")
           .select(

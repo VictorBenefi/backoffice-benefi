@@ -112,6 +112,11 @@ export default async function ProtectedLayout({
       roles: ["admin"],
     },
     {
+      href: "/comisiones-partners",
+      label: "Comisiones Partners",
+      roles: ["admin"],
+    },
+    {
       href: "/usuarios",
       label: "Usuarios",
       roles: ["admin"],

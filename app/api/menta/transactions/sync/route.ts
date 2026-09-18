@@ -119,6 +119,43 @@ function splitIntoChunks<T>(
 
   return chunks;
 }
+function normalizeForComparison(
+  value: unknown
+): string {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return "";
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value
+      .map((item) =>
+        normalizeForComparison(item)
+      )
+      .join(",")}]`;
+  }
+
+  if (typeof value === "object") {
+    const objectValue =
+      value as Record<string, unknown>;
+
+    const sortedEntries =
+      Object.keys(objectValue)
+        .sort()
+        .map(
+          (key) =>
+            `${JSON.stringify(key)}:${normalizeForComparison(
+              objectValue[key]
+            )}`
+        );
+
+    return `{${sortedEntries.join(",")}}`;
+  }
+
+  return JSON.stringify(value);
+}
 
 async function syncMentaTransactions() {
   try {
@@ -144,9 +181,9 @@ async function syncMentaTransactions() {
     // 2. Obtener las páginas restantes
     for (let page = 1; page < totalPages; page++) {
       const pageData =
-        await mentaRequest<MentaTransactionResponse>(
-          `/v2/transaction-reports?page=${page}&size=${pageSize}`
-        );
+      await mentaRequest<MentaTransactionResponse>(
+        `/v2/transaction-reports?page=${page}&size=${pageSize}`
+      );
 
       allTransactions.push(
         ...(pageData.content || [])
@@ -277,6 +314,75 @@ const transactionsWithReferences =
       }
     }
 
+    // 5. Cargar operaciones ya existentes
+    const operationIds =
+      transactionsWithReferences
+        .map((transaction) =>
+          transaction.operation_id
+            ? String(transaction.operation_id)
+            : null
+        )
+        .filter(
+          (operationId): operationId is string =>
+            Boolean(operationId)
+        );
+
+    const existingTransactions: Array<{
+      operation_id: string | null;
+      pos_id: string | null;
+      merchant_id_benefi: string | null;
+      merchant_branch_id_benefi: string | null;
+      status: string | null;
+      merchant_payment_date: string | null;
+      merchant_net_amount: number | null;
+      payment_method: string | null;
+      gross_amount: number | null;
+      installments: number | null;
+      financing: string | null;
+      acquirer: string | null;
+      operation_type: string | null;
+      operation_detail: unknown;
+      tax_info: unknown;
+    }> = [];
+
+    const operationIdChunks =
+      splitIntoChunks(operationIds, 100);
+
+    for (const operationIdChunk of operationIdChunks) {
+      const { data, error } =
+        await supabase
+          .from("menta_transactions")
+          .select(
+              "operation_id, pos_id, merchant_id_benefi, merchant_branch_id_benefi, status, merchant_payment_date, merchant_net_amount, payment_method, gross_amount, installments, financing, acquirer, operation_type, operation_detail, tax_info"
+            )
+          .in("operation_id", operationIdChunk);
+
+      if (error) {
+        throw new Error(
+          `No se pudieron verificar las operaciones existentes: ${error.message}`
+        );
+      }
+
+      existingTransactions.push(
+        ...(data || [])
+      );
+    }
+
+    const existingByOperationId = new Map(
+      (existingTransactions || []).map(
+        (transaction) => [
+          String(transaction.operation_id),
+          transaction,
+        ]
+      )
+    );
+
+    const newOperationsCount =
+    operationIds.filter(
+      (operationId) =>
+        !existingByOperationId.has(operationId)
+    ).length;
+
     // 5. Preparar todas las filas antes de escribir
     const now = new Date().toISOString();
 
@@ -303,14 +409,28 @@ const transactionsWithReferences =
           withoutPos++;
         }
 
+        const existingTransaction =
+        transaction.operation_id
+          ? existingByOperationId.get(
+              String(transaction.operation_id)
+            )
+          : null;
+
         return {
-          pos_id: pos?.id || null,
+          pos_id:
+            existingTransaction?.pos_id ??
+            pos?.id ??
+            null,
 
           merchant_id_benefi:
-            pos?.merchant_id || null,
+            existingTransaction?.merchant_id_benefi ??
+            pos?.merchant_id ??
+            null,
 
           merchant_branch_id_benefi:
-            pos?.merchant_branch_id || null,
+            existingTransaction?.merchant_branch_id_benefi ??
+            pos?.merchant_branch_id ??
+            null,
 
           customer_id_menta:
             transaction.customer_id
@@ -429,11 +549,175 @@ const transactionsWithReferences =
       }
     );
 
+    const changedOperationsCount =
+    rows.filter((row) => {
+      if (!row.operation_id) {
+        return false;
+      }
+
+      const existing =
+        existingByOperationId.get(
+          row.operation_id
+        );
+
+      if (!existing) {
+        return false;
+      }
+
+    return (
+      normalizeForComparison(existing.status) !==
+        normalizeForComparison(row.status) ||
+      normalizeForComparison(
+        existing.merchant_payment_date
+      ) !==
+        normalizeForComparison(
+          row.merchant_payment_date
+        ) ||
+      normalizeForComparison(
+        existing.merchant_net_amount
+      ) !==
+        normalizeForComparison(
+          row.merchant_net_amount
+        ) ||
+      normalizeForComparison(
+        existing.payment_method
+      ) !==
+        normalizeForComparison(
+          row.payment_method
+        ) ||
+      normalizeForComparison(
+        existing.gross_amount
+      ) !==
+        normalizeForComparison(
+          row.gross_amount
+        ) ||
+      normalizeForComparison(
+        existing.installments
+      ) !==
+        normalizeForComparison(
+          row.installments
+        ) ||
+      normalizeForComparison(
+        existing.financing
+      ) !==
+        normalizeForComparison(
+          row.financing
+        ) ||
+      normalizeForComparison(
+        existing.acquirer
+      ) !==
+        normalizeForComparison(
+          row.acquirer
+        ) ||
+      normalizeForComparison(
+        existing.operation_type
+      ) !==
+        normalizeForComparison(
+          row.operation_type
+        ) ||
+      normalizeForComparison(
+        existing.operation_detail
+      ) !==
+        normalizeForComparison(
+          row.operation_detail
+        ) ||
+      normalizeForComparison(
+        existing.tax_info
+      ) !==
+        normalizeForComparison(
+          row.tax_info
+        )
+    );
+  }).length;
+
+  const rowsToSync =
+  rows.filter((row) => {
+    if (!row.operation_id) {
+      return false;
+    }
+
+    const existing =
+      existingByOperationId.get(
+        row.operation_id
+      );
+
+    // Operación nueva
+    if (!existing) {
+      return true;
+    }
+
+    // Operación existente pero modificada
+    return (
+      normalizeForComparison(existing.status) !==
+        normalizeForComparison(row.status) ||
+      normalizeForComparison(
+        existing.merchant_payment_date
+      ) !==
+        normalizeForComparison(
+          row.merchant_payment_date
+        ) ||
+      normalizeForComparison(
+        existing.merchant_net_amount
+      ) !==
+        normalizeForComparison(
+          row.merchant_net_amount
+        ) ||
+      normalizeForComparison(
+        existing.payment_method
+      ) !==
+        normalizeForComparison(
+          row.payment_method
+        ) ||
+      normalizeForComparison(
+        existing.gross_amount
+      ) !==
+        normalizeForComparison(
+          row.gross_amount
+        ) ||
+      normalizeForComparison(
+        existing.installments
+      ) !==
+        normalizeForComparison(
+          row.installments
+        ) ||
+      normalizeForComparison(
+        existing.financing
+      ) !==
+        normalizeForComparison(
+          row.financing
+        ) ||
+      normalizeForComparison(
+        existing.acquirer
+      ) !==
+        normalizeForComparison(
+          row.acquirer
+        ) ||
+      normalizeForComparison(
+        existing.operation_type
+      ) !==
+        normalizeForComparison(
+          row.operation_type
+        ) ||
+      normalizeForComparison(
+        existing.operation_detail
+      ) !==
+        normalizeForComparison(
+          row.operation_detail
+        ) ||
+      normalizeForComparison(
+        existing.tax_info
+      ) !==
+        normalizeForComparison(
+          row.tax_info
+        )
+    );
+  });
+
     // 6. Guardar por lotes
     const batchSize = 500;
 
     const batches = splitIntoChunks(
-      rows,
+      rowsToSync,
       batchSize
     );
 
@@ -492,6 +776,10 @@ const transactionsWithReferences =
 
         synced,
 
+        new_operations: newOperationsCount,
+
+        changed_operations: changedOperationsCount,
+
         without_pos: withoutPos,
 
         skipped,
@@ -522,6 +810,8 @@ const transactionsWithReferences =
     );
   }
 }
+
+
 export async function POST() {
   const role = await getUserRole();
 

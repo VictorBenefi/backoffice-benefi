@@ -191,20 +191,25 @@ function getTransactionEconomics(
     };
   }
 
-  const merchantRate =
+const merchantRate =
+  Math.abs(
     getTaxRate(
       transaction.tax_info,
       "CUSTOMER_TO_MERCHANT_COMMISSION"
-    ) ?? 0;
-
+    ) ?? 0
+  );
   const acquirerRate =
-    paymentMethod === "QR"
-      ? Number(setting.acquirer_rate || 0)
-      : getTaxRate(
+  paymentMethod === "QR"
+    ? Math.abs(
+        Number(setting.acquirer_rate || 0)
+      )
+    : Math.abs(
+        getTaxRate(
           transaction.tax_info,
           "ACQUIRER_TO_CUSTOMER_COMMISSION"
         ) ??
-        Number(setting.acquirer_rate || 0);
+          Number(setting.acquirer_rate || 0)
+      );
 
   const mentaRate = Number(
     setting.menta_rate || 0
@@ -241,8 +246,16 @@ function getTransactionEconomics(
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+
+    const { searchParams } = new URL(request.url);
+
+    const dateFrom =
+      searchParams.get("dateFrom");
+
+    const dateTo =
+      searchParams.get("dateTo");
     const role = await getUserRole();
 
     const allowedRoles = [
@@ -287,6 +300,14 @@ export async function GET() {
         merchant_net_amount,
         reconciliation_difference
         `)
+        .gte(
+          "merchant_payment_date",
+          dateFrom || "1970-01-01"
+        )
+        .lte(
+          "merchant_payment_date",
+          dateTo || "2999-12-31"
+        )
         .order("merchant_payment_date", {
           ascending: false,
         }),
@@ -341,7 +362,19 @@ export async function GET() {
         tax_info
       `)
       .eq("status", "APPROVED")
-      .not("merchant_payment_date", "is", null),
+      .not("merchant_payment_date", "is", null)
+      .gte(
+        "merchant_payment_date",
+        dateFrom || "1970-01-01"
+      )
+      .lte(
+        "merchant_payment_date",
+        dateTo || "2999-12-31"
+      )
+      .order("merchant_payment_date", {
+        ascending: false,
+      })
+      .limit(1000),
     ]);
 
     if (liquidationsResult.error) {
