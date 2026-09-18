@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Search } from "lucide-react";
 import * as XLSX from "xlsx";
 
 type Transaction = {
@@ -23,6 +24,8 @@ type Transaction = {
     operation_detail: {
       card?: {
         card_brand?: string | null;
+        card_bin?: string | null;
+        card_mask?: string | null;
         is_international_card?: boolean | null;
       } | null;
     } | null;
@@ -226,6 +229,57 @@ function getCardBrand(transaction: Transaction) {
     : brand;
 }
 
+function getOperationDetailValue(
+  operationDetail: Transaction["operation_detail"],
+  key: string
+) {
+  if (!operationDetail) {
+    return null;
+  }
+
+  const detail =
+    operationDetail as Record<string, unknown>;
+
+  const value = detail[key];
+
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return null;
+  }
+
+  return String(value);
+}
+
+function getCardDetailValue(
+  operationDetail: Transaction["operation_detail"],
+  key: string
+) {
+  if (!operationDetail?.card) {
+    return null;
+  }
+
+  const card =
+    operationDetail.card as Record<
+      string,
+      unknown
+    >;
+
+  const value = card[key];
+
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return null;
+  }
+
+  return String(value);
+}
+
 function statusLabel(value: string | null) {
   switch (normalize(value)) {
     case "APPROVED":
@@ -249,6 +303,10 @@ export default function OperacionesPage() {
   const [transactions, setTransactions] = useState<
     Transaction[]
   >([]);
+  const [
+  selectedTransaction,
+  setSelectedTransaction,
+] = useState<Transaction | null>(null);
 
   const [merchants, setMerchants] = useState<Merchant[]>(
     []
@@ -1132,6 +1190,11 @@ useEffect(() => {
                     <th className="px-4 py-3">
                       Estado
                     </th>
+                    
+                    <th
+                      className="px-4 py-3 text-center"
+                      aria-label="Ver detalle"
+                    />
                   </tr>
                 </thead>
 
@@ -1162,7 +1225,10 @@ useEffect(() => {
                               ) || null
                             : null
                         }
-                      />
+                        onViewDetail={() =>
+                          setSelectedTransaction(transaction)
+                        }
+                        />
                     )
                   )}
                 </tbody>
@@ -1196,13 +1262,221 @@ useEffect(() => {
                           ) || null
                         : null
                     }
+                    onViewDetail={() =>
+                      setSelectedTransaction(transaction)
+                    }
                   />
                 )
               )}
             </div>
           </>
         )}
-      </section>
+            </section>
+
+      {selectedTransaction && (
+        <div className="fixed inset-0 z-50">
+          <button
+            type="button"
+            aria-label="Cerrar detalle"
+            onClick={() =>
+              setSelectedTransaction(null)
+            }
+            className="absolute inset-0 bg-slate-950/30"
+          />
+
+          <aside className="absolute right-0 top-0 h-full w-full max-w-[460px] overflow-y-auto bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Detalle de operación
+                </p>
+
+                <h2 className="mt-1 text-lg font-bold text-slate-950">
+                  N°{" "}
+                  {selectedTransaction.operation_number ||
+                    "-"}
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setSelectedTransaction(null)
+                }
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-950"
+                aria-label="Cerrar detalle"
+                title="Cerrar"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-5">
+              <div className="border-b border-slate-200 pb-5 text-center">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Estado
+                </p>
+
+                <div className="mt-2">
+                  <StatusBadge
+                    status={
+                      selectedTransaction.status
+                    }
+                  />
+                </div>
+
+                <p className="mt-3 text-sm text-slate-500">
+                  {isApproved(
+                    selectedTransaction
+                  )
+                    ? "Transacción aprobada"
+                    : statusLabel(
+                        selectedTransaction.status
+                      )}
+                </p>
+              </div>
+              <div className="mt-5">
+                <h3 className="mb-4 text-sm font-semibold text-slate-950">
+                  Datos de la operación
+                </h3>
+
+                <div className="space-y-3">
+                  <DetailRow
+                    label="Fecha / hora"
+                    value={formatDateTime(
+                      selectedTransaction.transaction_datetime
+                    )}
+                  />
+
+                  <DetailRow
+                    label="RRN"
+                    value={
+                      getOperationDetailValue(
+                        selectedTransaction.operation_detail,
+                        "rrn"
+                      ) || "-"
+                    }
+                  />
+
+                  <DetailRow
+                    label="Autorización"
+                    value={
+                      getOperationDetailValue(
+                        selectedTransaction.operation_detail,
+                        "authorization_code"
+                      ) || "-"
+                    }
+                  />
+
+                  <DetailRow
+                    label="N° de operación"
+                    value={
+                      selectedTransaction.operation_number ||
+                      "-"
+                    }
+                  />
+
+                  <DetailRow
+                    label="Comercio"
+                    value={
+                      selectedTransaction.merchant_id_benefi
+                        ? merchantMap.get(
+                            selectedTransaction.merchant_id_benefi
+                          )?.name || "Sin vincular"
+                        : "Sin vincular"
+                    }
+                  />
+
+                  <DetailRow
+                    label="POS"
+                    value={
+                      selectedTransaction.pos_id
+                        ? getPosDisplay(
+                            posMap.get(
+                              selectedTransaction.pos_id
+                            ) || null
+                          )
+                        : "-"
+                    }
+                  />
+
+                  <DetailRow
+                    label="Tipo"
+                    value={operationLabel(
+                      selectedTransaction
+                    )}
+                  />
+                </div>
+              </div>
+              <div className="mt-5 border-t border-slate-200 pt-5">
+                <h3 className="mb-4 text-sm font-semibold text-slate-950">
+                  Datos del pago
+                </h3>
+
+                <div className="space-y-3">
+                  <DetailRow
+                    label="Medio de pago"
+                    value={paymentMethodLabel(
+                      selectedTransaction.payment_method
+                    )}
+                  />
+
+                  <DetailRow
+                    label="Marca"
+                    value={getCardBrand(
+                      selectedTransaction
+                    )}
+                  />
+
+                  <DetailRow
+                    label="Tarjeta"
+                    value={
+                      getCardDetailValue(
+                        selectedTransaction.operation_detail,
+                        "card_mask"
+                      ) || "-"
+                    }
+                  />
+
+                  <DetailRow
+                    label="BIN"
+                    value={
+                      getCardDetailValue(
+                        selectedTransaction.operation_detail,
+                        "card_bin"
+                      ) || "-"
+                    }
+                  />
+
+                  <DetailRow
+                    label="Cuotas"
+                    value={
+                      selectedTransaction.installments
+                        ? String(
+                            selectedTransaction.installments
+                          )
+                        : "-"
+                    }
+                  />
+
+                  <DetailRow
+                    label="Importe"
+                    value={formatMoney(
+                      Number(
+                        selectedTransaction.gross_amount ||
+                          0
+                      ),
+                      selectedTransaction.currency || "ARS"
+                    )}
+                    strong
+                  />
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
+
     </main>
   );
 }
@@ -1261,11 +1535,13 @@ function OperationRow({
   merchant,
   branch,
   pos,
+  onViewDetail,
 }: {
   transaction: Transaction;
   merchant: Merchant | null;
   branch: MerchantBranch | null;
   pos: PosDevice | null;
+  onViewDetail: () => void;
 }) {
   const refund =
     isRefundOrCancellation(transaction);
@@ -1361,6 +1637,18 @@ function OperationRow({
       <td className="px-4 py-3">
         <StatusBadge status={transaction.status} />
       </td>
+
+      <td className="px-4 py-3 text-center">
+        <button
+          type="button"
+          onClick={onViewDetail}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-950"
+          title="Ver detalle de operación"
+          aria-label="Ver detalle de operación"
+        >
+          <Search size={18} />
+        </button>
+      </td>
     </tr>
   );
 }
@@ -1370,11 +1658,13 @@ function OperationCard({
   merchant,
   branch,
   pos,
+  onViewDetail,
 }: {
   transaction: Transaction;
   merchant: Merchant | null;
   branch: MerchantBranch | null;
   pos: PosDevice | null;
+  onViewDetail: () => void;
 }) {
   const refund =
     isRefundOrCancellation(transaction);
@@ -1503,6 +1793,14 @@ function OperationCard({
           )}
         </p>
       </div>
+      <button
+        type="button"
+        onClick={onViewDetail}
+        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+      >
+        <Search size={17} />
+        Ver detalle
+      </button>
     </article>
   );
 }
@@ -1526,6 +1824,35 @@ function MobileDetail({
     </div>
   );
 }
+
+function DetailRow({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-5">
+      <span className="text-sm text-slate-500">
+        {label}
+      </span>
+
+      <span
+        className={`text-right text-sm ${
+          strong
+            ? "font-bold text-slate-950"
+            : "font-medium text-slate-800"
+        }`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
 function StatusBadge({
   status,
 }: {
