@@ -145,6 +145,19 @@ export default function PortalComercioLiquidacionDetallePage() {
 
   const [posDevices, setPosDevices] =
     useState<PosDevice[]>([]);
+  
+  const [posFilter, setPosFilter] =
+  useState("");
+
+const [
+  paymentMethodFilter,
+  setPaymentMethodFilter,
+] = useState("");
+
+const [
+  operationSearch,
+  setOperationSearch,
+] = useState("");
 
   const [
   taxBreakdown,
@@ -293,6 +306,48 @@ function getPosCode(
     ? `${brand} (Internacional)`
     : brand;
 }
+
+const filteredTransactions =
+  useMemo(() => {
+    const search =
+      operationSearch
+        .trim()
+        .toLowerCase();
+
+    return transactions.filter(
+      (transaction) => {
+        const matchesPos =
+          !posFilter ||
+          transaction.pos_id ===
+            posFilter;
+
+        const matchesPaymentMethod =
+          !paymentMethodFilter ||
+          transaction.payment_method ===
+            paymentMethodFilter;
+
+        const matchesOperation =
+          !search ||
+          (
+            transaction.operation_number ||
+            ""
+          )
+            .toLowerCase()
+            .includes(search);
+
+        return (
+          matchesPos &&
+          matchesPaymentMethod &&
+          matchesOperation
+        );
+      }
+    );
+  }, [
+    transactions,
+    posFilter,
+    paymentMethodFilter,
+    operationSearch,
+  ]);
 
   const totals = useMemo(() => {
     return transactions.reduce(
@@ -1978,6 +2033,100 @@ liquidationBreakdownRows.push([
           </table>
         </div>
       </section>
+      <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-4">
+          <h2 className="text-base font-semibold text-slate-900">
+            Filtros de operaciones
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Los filtros afectan únicamente el detalle de operaciones.
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              POS
+            </label>
+
+            <select
+              value={posFilter}
+              onChange={(event) =>
+                setPosFilter(event.target.value)
+              }
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-500"
+            >
+              <option value="">
+                Todos los POS
+              </option>
+
+              {posDevices.map((pos) => (
+                <option
+                  key={pos.id}
+                  value={pos.id}
+                >
+                  {getPosCode(pos.id)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Medio de pago
+            </label>
+
+            <select
+              value={paymentMethodFilter}
+              onChange={(event) =>
+                setPaymentMethodFilter(
+                  event.target.value
+                )
+              }
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-500"
+            >
+              <option value="">
+                Todos
+              </option>
+
+              <option value="QR">
+                QR
+              </option>
+
+              <option value="DEBIT">
+                Débito
+              </option>
+
+              <option value="CREDIT">
+                Crédito
+              </option>
+
+              <option value="PREPAID">
+                Prepago
+              </option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Buscar operación
+            </label>
+
+            <input
+              type="text"
+              value={operationSearch}
+              onChange={(event) =>
+                setOperationSearch(
+                  event.target.value
+                )
+              }
+              placeholder="N° operación"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-500"
+            />
+          </div>
+        </div>
+      </section>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-4 py-4">
@@ -1986,7 +2135,7 @@ liquidationBreakdownRows.push([
           </h2>
 
           <p className="mt-1 text-sm text-slate-500">
-            {transactions.length} operaciones encontradas
+            {filteredTransactions.length} operaciones encontradas
           </p>
         </div>
 
@@ -2033,7 +2182,7 @@ liquidationBreakdownRows.push([
             </thead>
 
             <tbody>
-              {transactions.map(
+              {filteredTransactions.map(
                 (transaction) => (
                   <tr
                     key={
