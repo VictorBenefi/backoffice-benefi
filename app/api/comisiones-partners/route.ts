@@ -45,6 +45,7 @@ export async function GET() {
           id,
           merchant_group_id,
           payment_method,
+          card_scope,
           commission_rate,
           valid_from,
           valid_to,
@@ -101,6 +102,12 @@ export async function POST(
       .trim()
       .toUpperCase();
 
+    const cardScope = String(
+      body.card_scope || "ALL"
+    )
+      .trim()
+      .toUpperCase();
+
     const commissionRate = Number(
       body.commission_rate
     );
@@ -124,14 +131,33 @@ export async function POST(
     }
 
     if (
-      !["QR", "DEBIT", "CREDIT"].includes(
-        paymentMethod
-      )
-    ) {
+        ![
+          "QR",
+          "DEBIT",
+          "CREDIT",
+          "PREPAID",
+        ].includes(paymentMethod)
+      ) {
       return NextResponse.json(
         {
           error:
             "Debés seleccionar un medio de pago válido.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (
+      ![
+        "ALL",
+        "NATIONAL",
+        "INTERNATIONAL",
+      ].includes(cardScope)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Debés seleccionar un tipo de tarjeta válido.",
         },
         { status: 400 }
       );
@@ -222,6 +248,12 @@ export async function POST(
         "payment_method",
         paymentMethod
       )
+      .eq(
+        "card_scope",
+        paymentMethod === "QR"
+          ? "ALL"
+          : cardScope
+      )
       .is("valid_to", null);
 
     if (closePreviousError) {
@@ -240,6 +272,10 @@ export async function POST(
             merchantGroupId,
           payment_method:
             paymentMethod,
+          card_scope:
+            paymentMethod === "QR"
+              ? "ALL"
+              : cardScope,
           commission_rate:
             commissionRate,
           valid_from: validFrom,
@@ -251,6 +287,7 @@ export async function POST(
           id,
           merchant_group_id,
           payment_method,
+          card_scope,
           commission_rate,
           valid_from,
           valid_to,
@@ -314,6 +351,7 @@ export async function PATCH(
           id,
           merchant_group_id,
           payment_method,
+          card_scope,
           commission_rate,
           valid_from,
           valid_to,
@@ -429,6 +467,7 @@ export async function PATCH(
           id,
           merchant_group_id,
           payment_method,
+          card_scope,
           commission_rate,
           valid_from,
           valid_to,

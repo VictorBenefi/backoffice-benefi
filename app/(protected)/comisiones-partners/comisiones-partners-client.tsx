@@ -14,7 +14,15 @@ type Partner = {
 type PartnerCommissionSetting = {
   id: string;
   merchant_group_id: string;
-  payment_method: "QR" | "DEBIT" | "CREDIT";
+  payment_method:
+  | "QR"
+  | "DEBIT"
+  | "CREDIT"
+  | "PREPAID";
+  card_scope:
+  | "ALL"
+  | "NATIONAL"
+  | "INTERNATIONAL";
   commission_rate: number;
   valid_from: string;
   valid_to: string | null;
@@ -35,10 +43,26 @@ const paymentMethodLabel = (method: string) => {
     case "CREDIT":
       return "Tarjeta de crédito";
 
+    case "PREPAID":
+    return "Tarjeta prepaga";
+
     default:
       return method;
   }
 };
+
+function cardScopeLabel(
+  scope: string
+) {
+  switch (scope) {
+    case "NATIONAL":
+      return "Nacional";
+    case "INTERNATIONAL":
+      return "Internacional";
+    default:
+      return "Todas";
+  }
+}
 
 const formatPercent = (
   value: number | string | null
@@ -100,6 +124,7 @@ const [deleting, setDeleting] =
 const [form, setForm] = useState({
   merchant_group_id: "",
   payment_method: "",
+  card_scope: "ALL",
   commission_rate: "",
   valid_from: "",
   notes: "",
@@ -153,12 +178,13 @@ const resetForm = () => {
   setEditingId(null);
 
   setForm({
-    merchant_group_id: "",
-    payment_method: "",
-    commission_rate: "",
-    valid_from: "",
-    notes: "",
-  });
+  merchant_group_id: "",
+  payment_method: "",
+  card_scope: "ALL",
+  commission_rate: "",
+  valid_from: "",
+  notes: "",
+});
 };
 
 const startEditing = (
@@ -167,17 +193,19 @@ const startEditing = (
   setEditingId(item.id);
 
   setForm({
-    merchant_group_id:
-      item.merchant_group_id,
-    payment_method:
-      item.payment_method,
-    commission_rate:
-      String(item.commission_rate),
-    valid_from:
-      item.valid_from,
-    notes:
-      item.notes || "",
-  });
+  merchant_group_id:
+    item.merchant_group_id,
+  payment_method:
+    item.payment_method,
+  card_scope:
+    item.card_scope || "ALL",
+  commission_rate:
+    String(item.commission_rate),
+  valid_from:
+    item.valid_from,
+  notes:
+    item.notes || "",
+});
 
   setError("");
   setShowForm(true);
@@ -486,6 +514,7 @@ const handleDelete = async () => {
                     ...current,
                     payment_method:
                       event.target.value,
+                    card_scope: "ALL",
                   }))
                 }
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900"
@@ -505,8 +534,43 @@ const handleDelete = async () => {
                 <option value="CREDIT">
                   Tarjeta de crédito
                 </option>
+
+                <option value="PREPAID">
+                  Tarjeta prepaga
+                </option>
               </select>
             </div>
+
+            {form.payment_method !== "QR" &&
+            form.payment_method !== "" && (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Tipo de tarjeta
+                </label>
+
+                <select
+                  value={form.card_scope}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      card_scope:
+                        event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                >
+                  <option value="ALL">
+                    Todas
+                  </option>
+                  <option value="NATIONAL">
+                    Nacional
+                  </option>
+                  <option value="INTERNATIONAL">
+                    Internacional
+                  </option>
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -635,6 +699,10 @@ const handleDelete = async () => {
                       Medio de pago
                     </th>
 
+                    <th className="...">
+                      TIPO DE TARJETA
+                    </th>
+
                     <th className="px-5 py-3 text-right">
                       Comisión
                     </th>
@@ -674,6 +742,14 @@ const handleDelete = async () => {
                           {paymentMethodLabel(
                             item.payment_method
                           )}
+                        </td>
+
+                        <td className="...">
+                          {item.payment_method === "QR"
+                            ? "-"
+                            : cardScopeLabel(
+                                item.card_scope
+                              )}
                         </td>
 
                         <td className="px-5 py-4 text-right font-semibold">
