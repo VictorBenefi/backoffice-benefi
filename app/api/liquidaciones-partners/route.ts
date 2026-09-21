@@ -322,7 +322,7 @@ if (merchantIds.length > 0) {
       nextMonthDateTime
     )
     .order("transaction_datetime", {
-      ascending: true,
+      ascending: false,
     });
 
   if (transactionsError) {

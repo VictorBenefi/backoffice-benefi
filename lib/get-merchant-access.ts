@@ -264,8 +264,34 @@ export async function getMerchantAccess() {
       ): id is string =>
         Boolean(id)
     );
+  const partnerGroupIds =
+  new Set<string>();
+
 
   if (groupIds.length > 0) {
+    const {
+      data: partnerGroups,
+      error: partnerGroupsError,
+    } = await supabaseAdmin
+      .from("merchant_groups")
+      .select("id")
+      .in("id", groupIds)
+      .eq("is_partner", true);
+
+    if (partnerGroupsError) {
+      console.log(
+        "Error obteniendo grupos Partner:",
+        partnerGroupsError
+      );
+
+      return null;
+    }
+
+    (partnerGroups ?? []).forEach(
+      (group) => {
+        partnerGroupIds.add(group.id);
+      }
+    );
     const {
       data: groupMerchants,
       error: groupMerchantsError,
@@ -343,22 +369,27 @@ export async function getMerchantAccess() {
   // =========================
 
   return {
-    user: appUser,
-    access,
+  user: appUser,
+  access,
 
-    allowedMerchantIds:
-      Array.from(
-        allowedMerchantIds
-      ),
+  allowedMerchantIds:
+    Array.from(
+      allowedMerchantIds
+    ),
 
-    fullMerchantAccessIds:
-      Array.from(
-        fullMerchantAccessIds
-      ),
+  fullMerchantAccessIds:
+    Array.from(
+      fullMerchantAccessIds
+    ),
 
-    allowedBranchIds:
-      Array.from(
-        allowedBranchIds
-      ),
-  };
+  allowedBranchIds:
+    Array.from(
+      allowedBranchIds
+    ),
+
+  partnerGroupIds:
+    Array.from(
+      partnerGroupIds
+    ),
+};
 }

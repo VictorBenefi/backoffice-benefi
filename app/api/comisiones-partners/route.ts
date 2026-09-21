@@ -230,37 +230,81 @@ export async function POST(
         .toISOString()
         .slice(0, 10);
 
-    const {
-      error: closePreviousError,
-    } = await supabaseAdmin
-      .from("partner_commission_settings")
-      .update({
-        valid_to: previousValidTo,
-        is_active: false,
-        updated_at:
-          new Date().toISOString(),
-      })
-      .eq(
-        "merchant_group_id",
-        merchantGroupId
-      )
-      .eq(
-        "payment_method",
-        paymentMethod
-      )
-      .eq(
-        "card_scope",
-        paymentMethod === "QR"
-          ? "ALL"
-          : cardScope
-      )
-      .is("valid_to", null);
+    const normalizedCardScope =
+  paymentMethod === "QR"
+    ? "ALL"
+    : cardScope;
 
-    if (closePreviousError) {
-      throw new Error(
-        closePreviousError.message
-      );
+const {
+  data: previousSettings,
+  error: previousSettingsError,
+} = await supabaseAdmin
+  .from("partner_commission_settings")
+  .select(`
+    id,
+    valid_from,
+    valid_to
+  `)
+  .eq(
+    "merchant_group_id",
+    merchantGroupId
+  )
+  .eq(
+    "payment_method",
+    paymentMethod
+  )
+  .eq(
+    "card_scope",
+    normalizedCardScope
+  )
+  .lt(
+    "valid_from",
+    validFrom
+  )
+  .or(
+    `valid_to.is.null,valid_to.gte.${validFrom}`
+  )
+  .order(
+    "valid_from",
+    {
+      ascending: false,
     }
+  )
+  .limit(1);
+
+if (previousSettingsError) {
+  throw new Error(
+    previousSettingsError.message
+  );
+}
+
+const previousSetting =
+  previousSettings?.[0];
+
+if (previousSetting) {
+  const {
+    error: closePreviousError,
+  } = await supabaseAdmin
+    .from(
+      "partner_commission_settings"
+    )
+    .update({
+      valid_to: previousValidTo,
+      is_active: false,
+      updated_at:
+        new Date().toISOString(),
+    })
+    .eq(
+      "id",
+      previousSetting.id
+    );
+
+  if (closePreviousError) {
+    throw new Error(
+      closePreviousError.message
+    );
+  }
+}
 
     const { data, error } =
       await supabaseAdmin
@@ -273,9 +317,7 @@ export async function POST(
           payment_method:
             paymentMethod,
           card_scope:
-            paymentMethod === "QR"
-              ? "ALL"
-              : cardScope,
+          normalizedCardScope,
           commission_rate:
             commissionRate,
           valid_from: validFrom,

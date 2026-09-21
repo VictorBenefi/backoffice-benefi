@@ -200,31 +200,22 @@ const merchantsQuery =
     });
 
     const groupQuery =
-    access.merchant_group_id
-      ? supabase
-          .from("merchant_groups")
-          .select(`
-            id,
-            name,
-            cuit,
-            address,
-            street,
-            street_number,
-            floor,
-            apartment,
-            city,
-            province,
-            postal_code
-          `)
-          .eq(
-            "id",
-            access.merchant_group_id
-          )
-          .maybeSingle()
-      : Promise.resolve({
-          data: null,
-          error: null,
-        });
+  access.merchant_group_id
+    ? supabase
+        .from("merchant_groups")
+        .select(`
+          id,
+          name
+        `)
+        .eq(
+          "id",
+          access.merchant_group_id
+        )
+        .maybeSingle()
+    : Promise.resolve({
+        data: null,
+        error: null,
+      });
 
     const [
       liquidationsResult,
