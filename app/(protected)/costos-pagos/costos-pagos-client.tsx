@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 type PaymentCostSetting = {
   id: string;
-  payment_method: "QR" | "DEBIT" | "CREDIT";
+  payment_method: "QR" | "DEBIT" | "CREDIT" | "PREPAID";
   acquirer_rate: number;
   menta_rate: number;
   panda_rate: number;
@@ -23,6 +23,8 @@ const paymentMethodLabel = (method: string) => {
       return "Tarjeta de débito";
     case "CREDIT":
       return "Tarjeta de crédito";
+    case "PREPAID":
+      return "Tarjeta prepaga";
     default:
       return method;
   }
@@ -215,6 +217,7 @@ const handleSave = async () => {
                     <option value="QR">QR</option>
                     <option value="DEBIT">Tarjeta de débito</option>
                     <option value="CREDIT">Tarjeta de crédito</option>
+                    <option value="PREPAID">Tarjeta prepaga</option>
                     </select>
                 </div>
 

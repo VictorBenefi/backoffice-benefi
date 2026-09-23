@@ -73,7 +73,7 @@ export async function POST(request: Request) {
     const notes = String(body.notes || "").trim();
 
     if (
-      !["QR", "DEBIT", "CREDIT"].includes(paymentMethod)
+      !["QR", "DEBIT", "CREDIT", "PREPAID"].includes(paymentMethod)
     ) {
       return NextResponse.json(
         { error: "Medio de pago inválido." },

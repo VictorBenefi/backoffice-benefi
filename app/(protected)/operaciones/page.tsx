@@ -35,7 +35,7 @@ type Transaction = {
 
 type PaymentCostSetting = {
   id: string;
-  payment_method: "QR" | "DEBIT" | "CREDIT";
+  payment_method: "QR" | "DEBIT" | "CREDIT" | "PREPAID";
   acquirer_rate: number;
   menta_rate: number;
   panda_rate: number;
