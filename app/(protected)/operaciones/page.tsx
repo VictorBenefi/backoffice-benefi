@@ -28,6 +28,7 @@ type Transaction = {
   acquirer: string | null;
 
   merchant_net_amount: number | null;
+  merchant_payment_date: string | null;
   operation_detail: Record<string, unknown> | null;
   tax_info: Record<string, unknown> | null;
 };
@@ -128,6 +129,19 @@ function formatDateTime(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "-";
+
+  const datePart = value.slice(0, 10);
+  const [year, month, day] = datePart.split("-");
+
+  if (!year || !month || !day) {
+    return value;
+  }
+
+  return `${day}/${month}/${year}`;
 }
 
 function normalize(value: string | null | undefined) {
@@ -804,6 +818,7 @@ const filteredTransactions = useMemo(() => {
           branch?.branch_name,
           pos?.code,
           pos?.serial,
+          pos?.merchant_reference,
           transaction.serial_number,
           transaction.operation_number,
           transaction.operation_id,
@@ -1773,6 +1788,13 @@ useEffect(() => {
                       "ARS"
                   )}
                   strong
+                />
+
+                <DetailRow
+                  label="Fecha de acreditación"
+                  value={formatDate(
+                    selectedTransaction.merchant_payment_date
+                  )}
                 />
               </div>
             </div>

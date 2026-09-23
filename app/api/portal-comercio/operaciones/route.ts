@@ -65,6 +65,7 @@ export async function GET() {
           payment_method,
           gross_amount,
           merchant_net_amount,
+          merchant_payment_date,
           currency,
           transaction_datetime,
           status,

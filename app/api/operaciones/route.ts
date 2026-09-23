@@ -64,6 +64,7 @@ export async function GET(request: Request) {
           financing,
           acquirer,
           merchant_net_amount,
+          merchant_payment_date,
           operation_detail,
           tax_info
         `)
