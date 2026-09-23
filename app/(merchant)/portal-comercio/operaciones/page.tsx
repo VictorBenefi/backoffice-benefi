@@ -1444,6 +1444,16 @@ useEffect(() => {
                   />
 
                   <DetailRow
+                    label="Titular"
+                    value={
+                      getOperationDetailValue(
+                        selectedTransaction.operation_detail,
+                        "holder_name"
+                      ) || "-"
+                    }
+                  />
+
+                  <DetailRow
                     label="Tarjeta"
                     value={
                       getCardDetailValue(
