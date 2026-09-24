@@ -7,6 +7,78 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+async function getAllTransactions(
+  dateFrom: string | null,
+  dateTo: string | null
+) {
+  const pageSize = 1000;
+  let from = 0;
+  let allTransactions: any[] = [];
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("menta_transactions")
+      .select(`
+        id,
+        pos_id,
+        merchant_id_benefi,
+        merchant_branch_id_benefi,
+        transaction_id,
+        operation_id,
+        operation_number,
+        serial_number,
+        operation_type,
+        payment_method,
+        gross_amount,
+        currency,
+        transaction_datetime,
+        status,
+        installments,
+        financing,
+        acquirer,
+        merchant_net_amount,
+        merchant_payment_date,
+        operation_detail,
+        tax_info
+      `)
+      .gte(
+        "transaction_datetime",
+        dateFrom
+          ? `${dateFrom}T00:00:00-03:00`
+          : "1970-01-01T00:00:00-03:00"
+      )
+      .lte(
+        "transaction_datetime",
+        dateTo
+          ? `${dateTo}T23:59:59.999-03:00`
+          : "2999-12-31T23:59:59.999-03:00"
+      )
+      .order("transaction_datetime", {
+        ascending: false,
+      })
+      .range(from, from + pageSize - 1);
+
+    if (error) {
+      throw new Error(
+        `Operaciones: ${error.message}`
+      );
+    }
+
+    const rows = data || [];
+
+    allTransactions =
+      allTransactions.concat(rows);
+
+    if (rows.length < pageSize) {
+      break;
+    }
+
+    from += pageSize;
+  }
+
+  return allTransactions;
+}
+
 export async function GET(request: Request) {
   try {
 
@@ -43,48 +115,11 @@ export async function GET(request: Request) {
       posResult,
       paymentCostsResult,
     ] = await Promise.all([
-      supabase
-        .from("menta_transactions")
-        .select(`
-          id,
-          pos_id,
-          merchant_id_benefi,
-          merchant_branch_id_benefi,
-          transaction_id,
-          operation_id,
-          operation_number,
-          serial_number,
-          operation_type,
-          payment_method,
-          gross_amount,
-          currency,
-          transaction_datetime,
-          status,
-          installments,
-          financing,
-          acquirer,
-          merchant_net_amount,
-          merchant_payment_date,
-          operation_detail,
-          tax_info
-        `)
-        .gte(
-          "transaction_datetime",
-          dateFrom
-            ? `${dateFrom}T00:00:00`
-            : "1970-01-01T00:00:00"
-        )
-        .lte(
-          "transaction_datetime",
+        getAllTransactions(
+          dateFrom,
           dateTo
-            ? `${dateTo}T23:59:59.999`
-            : "2999-12-31T23:59:59.999"
-        )
-        .order("transaction_datetime", {
-          ascending: false,
-        })
-        .limit(500),
-
+        ),
+      
       supabase
         .from("merchants")
         .select("id, name")
@@ -127,12 +162,6 @@ export async function GET(request: Request) {
       }),
     ]);
 
-    if (transactionsResult.error) {
-      throw new Error(
-        `Operaciones: ${transactionsResult.error.message}`
-      );
-    }
-
     if (merchantsResult.error) {
       throw new Error(
         `Comercios: ${merchantsResult.error.message}`
@@ -161,7 +190,7 @@ export async function GET(request: Request) {
       ok: true,
 
       transactions:
-        transactionsResult.data || [],
+        transactionsResult,
 
       merchants:
         merchantsResult.data || [],
