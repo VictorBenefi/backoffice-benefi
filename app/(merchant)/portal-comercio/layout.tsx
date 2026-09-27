@@ -33,6 +33,10 @@ const menu = [
     href: "/portal-comercio/liquidaciones",
     label: "Liquidaciones",
   },
+  {
+    href: "/portal-comercio/cierre-turno",
+    label: "Cierre de turno",
+  },
   ...(isPartner
     ? [
         {
