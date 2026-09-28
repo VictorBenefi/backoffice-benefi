@@ -411,6 +411,20 @@ export default function PosClient({
     return vendor?.name || "-";
   };
 
+  const getPosVendorName = (pos: PosDevice) => {
+  if (pos.merchant_id) {
+    const merchant = merchants.find(
+      (merchant) => merchant.id === pos.merchant_id
+    );
+
+    if (merchant?.vendor_id) {
+      return getVendorName(merchant.vendor_id);
+    }
+  }
+
+  return getVendorName(pos.vendor_id);
+};
+
   const getMerchantName = (merchantId: string | null) => {
     if (!merchantId) return "-";
     const merchant = merchants.find((m) => m.id === merchantId);
@@ -672,7 +686,7 @@ export default function PosClient({
         (pos.serial || "").toLowerCase().includes(searchText) ||
         (pos.imei || "").toLowerCase().includes(searchText) ||
         (pos.imei_2 || "").toLowerCase().includes(searchText) ||
-        getVendorName(pos.vendor_id).toLowerCase().includes(searchText) ||
+        getPosVendorName(pos).toLowerCase().includes(searchText) ||
         getMerchantName(pos.merchant_id).toLowerCase().includes(searchText) ||
         getStatusLabel(pos.status).toLowerCase().includes(searchText) ||
         installationLabel.includes(searchText)
@@ -699,7 +713,7 @@ export default function PosClient({
         Estado: getStatusLabel(pos.status),
         Instalacion: getInstallationStatusLabel(latestInstallation?.status || null),
         "Fecha instalacion": latestInstallation?.install_date || "",
-        Vendedor: getVendorName(pos.vendor_id),
+        Vendedor: getPosVendorName(pos),
         Comercio: getMerchantName(pos.merchant_id),
         "Fecha alta": pos.created_at
           ? new Date(pos.created_at).toLocaleString("es-AR")
@@ -1056,7 +1070,7 @@ export default function PosClient({
                               <span className="font-semibold text-slate-500">
                                 Vendedor:
                               </span>{" "}
-                              {getVendorName(pos.vendor_id)}
+                              {getPosVendorName(pos)}
                             </p>
 
                             <p>
@@ -1172,7 +1186,7 @@ export default function PosClient({
                                     <span className="font-semibold text-slate-500">
                                       Vendedor:
                                     </span>{" "}
-                                    {getVendorName(pos.vendor_id)}
+                                    {getPosVendorName(pos)}
                                   </p>
 
                                   <p>
