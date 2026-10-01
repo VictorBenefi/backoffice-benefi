@@ -351,52 +351,89 @@ export async function GET(request: NextRequest) {
     );
     }
 
-    const transactionsResult = await supabase
+const PAGE_SIZE = 1000;
+
+const transactions: Array<{
+  id: string;
+  merchant_id_benefi: string | null;
+  merchant_branch_id_benefi: string | null;
+  merchant_payment_date: string | null;
+  operation_number: string | null;
+  operation_type: string | null;
+  payment_method: string | null;
+  installments: number | null;
+  gross_amount: number | string | null;
+  merchant_net_amount: number | string | null;
+  transaction_datetime: string | null;
+  status: string | null;
+  pos_id: string | null;
+  operation_detail: unknown;
+  tax_info: unknown;
+}> = [];
+
+let from = 0;
+
+while (true) {
+  const { data, error } = await supabase
     .from("menta_transactions")
     .select(`
-        id,
-        merchant_id_benefi,
-        merchant_branch_id_benefi,
-        merchant_payment_date,
-        operation_number,
-        operation_type,
-        payment_method,
-        installments,
-        gross_amount,
-        merchant_net_amount,
-        transaction_datetime,
-        status,
-        pos_id,
-        operation_detail,
-        tax_info
+      id,
+      merchant_id_benefi,
+      merchant_branch_id_benefi,
+      merchant_payment_date,
+      operation_number,
+      operation_type,
+      payment_method,
+      installments,
+      gross_amount,
+      merchant_net_amount,
+      transaction_datetime,
+      status,
+      pos_id,
+      operation_detail,
+      tax_info
     `)
     .eq("status", "APPROVED")
     .gte("merchant_payment_date", startDate)
     .lt("merchant_payment_date", nextMonth)
     .order("merchant_payment_date", {
-        ascending: true,
-    });
+      ascending: true,
+    })
+    .order("id", {
+      ascending: true,
+    })
+    .range(from, from + PAGE_SIZE - 1);
 
-  if (transactionsResult.error) {
-  console.error(
-    "Error loading BENEFÍ report transactions:",
-    transactionsResult.error
-  );
+  if (error) {
+    console.error(
+      "Error loading BENEFÍ report transactions:",
+      error
+    );
 
-  return NextResponse.json(
-    {
-      error:
-        "No se pudieron cargar las operaciones del informe",
-    },
-    { status: 500 }
-  );
+    return NextResponse.json(
+      {
+        error:
+          "No se pudieron cargar las operaciones del informe",
+      },
+      { status: 500 }
+    );
+  }
+
+  const rows = data || [];
+
+  transactions.push(...rows);
+
+  if (rows.length < PAGE_SIZE) {
+    break;
+  }
+
+  from += PAGE_SIZE;
 }
 
 const paymentCosts =
   paymentCostsResult.data || [];
 
-const transactions =
-  transactionsResult.data || [];
+
 
 const totals = transactions.reduce(
   (acc, transaction) => {
@@ -624,8 +661,7 @@ return NextResponse.json({
   month,
   startDate,
   nextMonth,
-  transactionCount:
-    transactionsResult.data?.length || 0,
+  transactionCount: transactions.length,
   totals,
   operations: operationDetails,
   liquidations: liquidationDetails,
