@@ -157,16 +157,33 @@ function normalizeForComparison(
   return JSON.stringify(value);
 }
 
-async function syncMentaTransactions() {
+async function syncMentaTransactions(options?: {
+  start?: string;
+  end?: string;
+}) {
   try {
     
 
     const pageSize = 100;
+    const dateParams = new URLSearchParams();
+
+    if (options?.start) {
+      dateParams.set("start", options.start);
+    }
+
+    if (options?.end) {
+      dateParams.set("end", options.end);
+    }
+
+    const dateQuery =
+      dateParams.toString()
+        ? `&${dateParams.toString()}`
+        : "";
 
     // 1. Obtener primera página
     const firstPage =
       await mentaRequest<MentaTransactionResponse>(
-        `/v2/transaction-reports?page=0&size=${pageSize}`
+        `/v2/transaction-reports?page=0&size=${pageSize}${dateQuery}`
       );
 
     const totalPages = Math.max(
@@ -182,7 +199,7 @@ async function syncMentaTransactions() {
     for (let page = 1; page < totalPages; page++) {
       const pageData =
       await mentaRequest<MentaTransactionResponse>(
-        `/v2/transaction-reports?page=${page}&size=${pageSize}`
+        `/v2/transaction-reports?page=${page}&size=${pageSize}${dateQuery}`
       );
 
       allTransactions.push(
@@ -860,5 +877,13 @@ export async function GET(
     );
   }
 
-  return syncMentaTransactions();
+  const end = new Date();
+  const start = new Date(end);
+
+  start.setDate(start.getDate() - 30);
+
+  return syncMentaTransactions({
+    start: start.toISOString(),
+    end: end.toISOString(),
+  });
 }
