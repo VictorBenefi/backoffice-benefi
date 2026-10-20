@@ -161,7 +161,30 @@ async function syncMentaTransactions(options?: {
   start?: string;
   end?: string;
 }) {
+  let lockToken: string | null = null;
+
   try {
+    const { data: acquiredToken, error: lockError } =
+      await supabase.rpc("acquire_menta_sync_lock", {
+        p_lock_name: "menta_transactions",
+        p_duration_seconds: 900,
+      });
+
+    if (lockError) {
+      throw new Error(
+        `Error adquiriendo bloqueo MENTA: ${lockError.message}`
+      );
+    }
+
+    if (!acquiredToken) {
+      return NextResponse.json({
+        ok: true,
+        skipped: true,
+        reason: "Ya existe una sincronización MENTA en ejecución.",
+      });
+    }
+
+    lockToken = acquiredToken;
     
 
     const pageSize = 100;
@@ -823,8 +846,23 @@ const transactionsWithReferences =
             ? error.message
             : "No se pudieron sincronizar las transacciones de MENTA.",
       },
-      { status: 500 }
+            { status: 500 }
     );
+  } finally {
+    if (lockToken) {
+      const { error: releaseError } =
+        await supabase.rpc("release_menta_sync_lock", {
+          p_lock_name: "menta_transactions",
+          p_lock_token: lockToken,
+        });
+
+      if (releaseError) {
+        console.error(
+          "Error liberando bloqueo MENTA:",
+          releaseError.message
+        );
+      }
+    }
   }
 }
 
@@ -877,13 +915,22 @@ export async function GET(
     );
   }
 
-  const end = new Date();
-  const start = new Date(end);
+    const url = new URL(request.url);
+    const mode = url.searchParams.get("mode");
 
-  start.setDate(start.getDate() - 30);
+    const end = new Date();
+    const start = new Date(end);
 
-  return syncMentaTransactions({
-    start: start.toISOString(),
-    end: end.toISOString(),
-  });
+    if (mode === "fast") {
+      // Sincronización rápida: últimas 2 horas
+      start.setHours(start.getHours() - 2);
+    } else {
+      // Sincronización histórica: últimos 30 días
+      start.setDate(start.getDate() - 30);
+    }
+
+    return syncMentaTransactions({
+      start: start.toISOString(),
+      end: end.toISOString(),
+    });
 }

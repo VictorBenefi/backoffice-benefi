@@ -1,8 +1,12 @@
 {
   "crons": [
     {
+      "path": "/api/menta/transactions/sync?mode=fast",
+      "schedule": "*/2 * * * *"
+    },
+    {
       "path": "/api/menta/transactions/sync",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 */6 * * *"
     }
   ]
 }
