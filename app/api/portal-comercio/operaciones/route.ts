@@ -7,8 +7,29 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+
+    const dateFrom = searchParams.get("dateFrom");
+    const dateTo = searchParams.get("dateTo");
+
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+
+    if (
+      (dateFrom && !datePattern.test(dateFrom)) ||
+      (dateTo && !datePattern.test(dateTo)) ||
+      (dateFrom && dateTo && dateFrom > dateTo)
+    ) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Rango de fechas inválido.",
+        },
+        { status: 400 }
+      );
+    }
+
     const merchantAccess =
       await getMerchantAccess();
 
@@ -132,13 +153,37 @@ export async function GET() {
       });
     }
 
-    transactionsQuery =
-      transactionsQuery.order(
-        "transaction_datetime",
-        {
-          ascending: false,
-        }
-      );
+    // =========================
+// FILTROS DE FECHA
+// Horario de Argentina
+// =========================
+
+if (dateFrom) {
+  transactionsQuery = transactionsQuery.gte(
+    "transaction_datetime",
+    `${dateFrom}T00:00:00-03:00`
+  );
+}
+
+if (dateTo) {
+  const nextDay = new Date(`${dateTo}T12:00:00Z`);
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+
+  const nextDate = nextDay.toISOString().slice(0, 10);
+
+  transactionsQuery = transactionsQuery.lt(
+    "transaction_datetime",
+    `${nextDate}T00:00:00-03:00`
+  );
+}
+
+// Ordenar operaciones de más reciente a más antigua
+transactionsQuery = transactionsQuery.order(
+  "transaction_datetime",
+  {
+    ascending: false,
+  }
+);
 
     // =========================
     // COMERCIOS
@@ -222,24 +267,52 @@ export async function GET() {
       }
     );
 
-    const [
-      transactionsResult,
-      merchantsResult,
-      branchesResult,
-      posResult,
-    ] = await Promise.all([
-      transactionsQuery,
-      merchantsQuery,
-      branchesQuery,
-      posQuery,
-    ]);
+    // =========================
+// PAGINACIÓN DE OPERACIONES
+// =========================
 
-    if (transactionsResult.error) {
-      throw new Error(
-        `Operaciones: ${transactionsResult.error.message}`
-      );
-    }
+const pageSize = 1000;
+let from = 0;
+const allTransactions: any[] = [];
 
+while (true) {
+  const { data, error } = await transactionsQuery.range(
+    from,
+    from + pageSize - 1
+  );
+
+  if (error) {
+    throw new Error(
+      `Operaciones: ${error.message}`
+    );
+  }
+
+  const rows = data || [];
+
+  allTransactions.push(...rows);
+
+  if (rows.length < pageSize) {
+    break;
+  }
+
+  from += pageSize;
+}
+
+// =========================
+// CONSULTAS COMPLEMENTARIAS
+// =========================
+
+const [
+  merchantsResult,
+  branchesResult,
+  posResult,
+] = await Promise.all([
+  merchantsQuery,
+  branchesQuery,
+  posQuery,
+]);
+
+    
     if (merchantsResult.error) {
       throw new Error(
         `Comercios: ${merchantsResult.error.message}`
@@ -261,8 +334,7 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
 
-      transactions:
-        transactionsResult.data || [],
+      transactions: allTransactions,
 
       merchants:
         merchantsResult.data || [],

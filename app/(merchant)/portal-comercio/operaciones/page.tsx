@@ -367,8 +367,18 @@ export default function OperacionesPage() {
     setMessage("");
 
     try {
+const params = new URLSearchParams();
+
+if (dateFrom) {
+  params.set("dateFrom", dateFrom);
+}
+
+if (dateTo) {
+  params.set("dateTo", dateTo);
+}
+
 const response = await fetch(
-  "/api/portal-comercio/operaciones",
+  `/api/portal-comercio/operaciones?${params.toString()}`,
   {
     method: "GET",
     cache: "no-store",
@@ -413,7 +423,7 @@ setPosDevices(
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [dateFrom, dateTo]);
 
 useEffect(() => {
     loadData();
