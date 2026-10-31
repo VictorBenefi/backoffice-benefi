@@ -330,12 +330,46 @@ const closureSummary = posDevices
       total: 0,
     };
 
+    
     const approvedTransactions =
       transactions.filter(
         (transaction) =>
           transaction.pos_id === pos.id &&
           transaction.status === "APPROVED"
       );
+
+    const approvedPayments =
+      approvedTransactions.filter(
+        (transaction) =>
+          (transaction.operation_type || "").toUpperCase() ===
+          "PAYMENT"
+      );
+
+    const approvedRefunds =
+      approvedTransactions.filter(
+        (transaction) =>
+          (transaction.operation_type || "").toUpperCase() ===
+          "REFUND"
+      );
+
+    const approvedAnnulments =
+      approvedTransactions.filter(
+        (transaction) =>
+          (transaction.operation_type || "").toUpperCase() ===
+          "ANNULMENT"
+      );
+
+    const refundAmount = approvedRefunds.reduce(
+      (sum, transaction) =>
+        sum + Math.abs(Number(transaction.gross_amount || 0)),
+      0
+    );
+
+    const annulmentAmount = approvedAnnulments.reduce(
+      (sum, transaction) =>
+        sum + Math.abs(Number(transaction.gross_amount || 0)),
+      0
+    );
 
     const rejectedTransactions =
       transactions.filter(
@@ -344,7 +378,8 @@ const closureSummary = posDevices
           transaction.status === "REJECTED"
       );
 
-    for (const transaction of approvedTransactions) {
+    
+    for (const transaction of approvedPayments) {
       const amount = Number(
         transaction.gross_amount || 0
       );
@@ -356,17 +391,32 @@ const closureSummary = posDevices
       totals.total += amount;
     }
 
-    return {
-        pos,
-        operationCount:
-            approvedTransactions.length +
-            rejectedTransactions.length,
-        approvedCount:
-            approvedTransactions.length,
-        rejectedCount:
-            rejectedTransactions.length,
-        ...totals,
-        };
+
+    
+  return {
+    pos,
+    operationCount:
+      approvedTransactions.length +
+      rejectedTransactions.length,
+    approvedCount:
+      approvedTransactions.length,
+    paymentCount:
+      approvedPayments.length,
+    refundCount:
+      approvedRefunds.length,
+    annulmentCount:
+      approvedAnnulments.length,
+    rejectedCount:
+      rejectedTransactions.length,
+    refundAmount,
+    annulmentAmount,
+    netTotal:
+      totals.total -
+      refundAmount -
+      annulmentAmount,
+    ...totals,
+  };
+
   });
 
 function exportClosureExcel() {
@@ -423,10 +473,10 @@ function exportClosureExcel() {
         [""],
     [
       "POS",
-        "OPERACIONES",
-        "APROBADAS",
-        "RECHAZADAS",
-        "VISA CRÉDITO",
+      "OPERACIONES",
+      "MOV. APROBADOS",
+      "RECHAZADAS",
+      "VISA CRÉDITO",
       "NARANJA",
       "VISA DÉBITO",
       "VISA PREPAGO",
@@ -438,7 +488,7 @@ function exportClosureExcel() {
       "MC DÉBITO",
       "QR",
       "OTROS",
-      "TOTAL",
+      "TOTAL TICKETS APROBADOS",
     ],
   ];
 
@@ -513,6 +563,51 @@ summaryRows.push([
   ),
 ]);
 
+  
+const totalTickets = closureSummary.reduce(
+  (sum, row) => sum + row.total,
+  0
+);
+
+const totalPaymentCount = closureSummary.reduce(
+  (sum, row) => sum + row.paymentCount,
+  0
+);
+
+const totalRefundCount = closureSummary.reduce(
+  (sum, row) => sum + row.refundCount,
+  0
+);
+
+const totalRefundAmount = closureSummary.reduce(
+  (sum, row) => sum + row.refundAmount,
+  0
+);
+
+const totalAnnulmentCount = closureSummary.reduce(
+  (sum, row) => sum + row.annulmentCount,
+  0
+);
+
+const totalAnnulmentAmount = closureSummary.reduce(
+  (sum, row) => sum + row.annulmentAmount,
+  0
+);
+
+const totalNet = closureSummary.reduce(
+  (sum, row) => sum + row.netTotal,
+  0
+);
+
+summaryRows.push(
+  [""],
+  ["CONCILIACIÓN DEL TURNO", "CANTIDAD", "IMPORTE"],
+  ["Tickets de cobro aprobados", totalPaymentCount, totalTickets],
+  ["Devoluciones", totalRefundCount, -totalRefundAmount],
+  ["Anulaciones", totalAnnulmentCount, -totalAnnulmentAmount],
+  ["MOVIMIENTO NETO", "", totalNet]
+);
+
   const summarySheet =
     XLSX.utils.aoa_to_sheet(summaryRows);
     // Título
@@ -524,6 +619,28 @@ if (summarySheet["A1"]) {
     },
   };
 }
+
+const reconciliationHeaderIndex = summaryRows.findIndex(
+  (row) => row[0] === "CONCILIACIÓN DEL TURNO"
+);
+
+if (reconciliationHeaderIndex !== -1) {
+  for (
+    let rowIndex = reconciliationHeaderIndex + 1;
+    rowIndex <= reconciliationHeaderIndex + 4;
+    rowIndex++
+  ) {
+    const cellAddress = XLSX.utils.encode_cell({
+      r: rowIndex,
+      c: 2,
+    });
+
+    if (summarySheet[cellAddress]) {
+      summarySheet[cellAddress].z = '"$" #,##0.00';
+    }
+  }
+}
+
 
 // Encabezados del resumen
 for (let column = 0; column <= 16; column++) {
@@ -998,7 +1115,7 @@ XLSX.utils.book_append_sheet(
                             </th>
 
                             <th className="px-3 py-3 text-center text-xs font-semibold uppercase text-slate-500">
-                            Aprobadas
+                            Mov. aprobados
                             </th>
 
                             <th className="px-3 py-3 text-center text-xs font-semibold uppercase text-slate-500">
@@ -1266,6 +1383,66 @@ XLSX.utils.book_append_sheet(
                     </tbody>
                     </table>
                 </div>
+                
+                <div className="border-t border-slate-200 bg-slate-50 p-4 sm:p-6">
+                  <h3 className="text-base font-semibold text-slate-900">
+                    Conciliación del turno
+                  </h3>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    Los tickets de cobro aprobados se muestran
+                    por separado de las devoluciones y anulaciones.
+                  </p>
+
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    {[
+                      {
+                        label: "Tickets aprobados",
+                        amount: closureSummary.reduce(
+                          (sum, row) => sum + row.total,
+                          0
+                        ),
+                      },
+                      {
+                        label: "Devoluciones",
+                        amount: closureSummary.reduce(
+                          (sum, row) => sum + row.refundAmount,
+                          0
+                        ),
+                      },
+                      {
+                        label: "Anulaciones",
+                        amount: closureSummary.reduce(
+                          (sum, row) => sum + row.annulmentAmount,
+                          0
+                        ),
+                      },
+                      {
+                        label: "Movimiento neto",
+                        amount: closureSummary.reduce(
+                          (sum, row) => sum + row.netTotal,
+                          0
+                        ),
+                      },
+                    ].map((item) => (
+                      <div
+                        key={item.label}
+                        className="rounded-xl border border-slate-200 bg-white p-4"
+                      >
+                        <p className="text-xs font-medium text-slate-500">
+                          {item.label}
+                        </p>
+                        <p className="mt-2 text-xl font-bold text-slate-950">
+                          {item.amount.toLocaleString("es-AR", {
+                            style: "currency",
+                            currency: "ARS",
+                          })}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 </section>
             )}
 
