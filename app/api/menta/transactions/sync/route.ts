@@ -64,6 +64,8 @@ type PosDevice = {
   merchant_branch_id: string | null;
 };
 
+export const maxDuration = 300;
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -160,32 +162,39 @@ function normalizeForComparison(
 async function syncMentaTransactions(options?: {
   start?: string;
   end?: string;
+  dryRun?: boolean;
+  historical?: boolean;
 }) {
   let lockToken: string | null = null;
 
   try {
-    const { data: acquiredToken, error: lockError } =
-      await supabase.rpc("acquire_menta_sync_lock", {
-        p_lock_name: "menta_transactions",
-        p_duration_seconds: 900,
-      });
+    // En modo de prueba no adquirir el bloqueo de producción.
+    if (!options?.dryRun) {
+      const { data: acquiredToken, error: lockError } =
+        await supabase.rpc("acquire_menta_sync_lock", {
+          p_lock_name: "menta_transactions",
+          p_duration_seconds: 900,
+        });
 
-    if (lockError) {
-      throw new Error(
-        `Error adquiriendo bloqueo MENTA: ${lockError.message}`
-      );
+      if (lockError) {
+        throw new Error(
+          `Error adquiriendo bloqueo MENTA: ${lockError.message}`
+        );
+      }
+
+      if (!acquiredToken) {
+        return NextResponse.json({
+          ok: true,
+          skipped: true,
+          reason:
+            "Ya existe una sincronización MENTA en ejecución.",
+        });
+      }
+
+      lockToken = acquiredToken;
     }
 
-    if (!acquiredToken) {
-      return NextResponse.json({
-        ok: true,
-        skipped: true,
-        reason: "Ya existe una sincronización MENTA en ejecución.",
-      });
-    }
 
-    lockToken = acquiredToken;
-    
 
     const pageSize = 100;
     const dateParams = new URLSearchParams();
@@ -209,10 +218,14 @@ async function syncMentaTransactions(options?: {
         `/v2/transaction-reports?page=0&size=${pageSize}${dateQuery}`
       );
 
-    const totalPages = Math.max(
-      firstPage.total_pages ?? 1,
-      1
-    );
+    if (!Array.isArray(firstPage.content)) {
+      throw new Error("MENTA devolvió una primera página sin operaciones válidas.");
+    }
+
+    const totalPages = Math.max(firstPage.total_pages ?? 1, 1);
+    if (!Number.isInteger(totalPages) || totalPages > 100) {
+      throw new Error(`Paginación MENTA fuera del límite seguro: ${totalPages} páginas.`);
+    }
 
     const allTransactions: MentaTransaction[] = [
       ...(firstPage.content || []),
@@ -225,9 +238,10 @@ async function syncMentaTransactions(options?: {
         `/v2/transaction-reports?page=${page}&size=${pageSize}${dateQuery}`
       );
 
-      allTransactions.push(
-        ...(pageData.content || [])
-      );
+      if (!Array.isArray(pageData.content) || pageData.content.length === 0) {
+        throw new Error(`MENTA devolvió la página ${page} vacía o inválida.`);
+      }
+      allTransactions.push(...pageData.content);
     }
 
     // 3. Eliminar duplicados por operation_id
@@ -753,6 +767,48 @@ const transactionsWithReferences =
     );
   });
 
+  // Modo de prueba: no guardar operaciones en Supabase
+
+const missingOperations = options?.dryRun
+  ? rows
+      .filter(
+        (row) =>
+          row.operation_id &&
+          !existingByOperationId.has(row.operation_id)
+      )
+      .map((row) => ({
+        operation_id: row.operation_id,
+        datetime: row.transaction_datetime,
+        terminal_id: row.terminal_id_menta,
+        merchant_id: row.merchant_id_menta,
+        status: row.status,
+        operation_type: row.operation_type,
+        gross_amount: row.gross_amount,
+      }))
+  : [];
+
+  if (options?.dryRun) {
+    return NextResponse.json({
+      ok: true,
+      dryRun: true,
+      missing_operations: missingOperations,
+      message:
+        "Simulación completada. No se modificaron operaciones.",
+      summary: {
+        received_from_menta: allTransactions.length,
+        total_pages_menta: totalPages,
+        total_elements_menta: firstPage.total_elements ?? null,
+        synced: 0,
+        unique_transactions: transactionsWithReferences.length,
+        new_operations: newOperationsCount,
+        changed_operations: changedOperationsCount,
+        without_pos: withoutPos,
+        skipped,
+        operations_that_would_sync: rowsToSync.length,
+      },
+    });
+  }
+
     // 6. Guardar por lotes
     const batchSize = 500;
 
@@ -782,17 +838,43 @@ const transactionsWithReferences =
             onConflict: "operation_id",
           });
 
+
       if (syncError) {
         errors.push({
           batch: index + 1,
           error: syncError.message,
         });
 
+        // En la conciliación histórica, detener el proceso
+        // si falla el guardado de un lote.
+        if (options?.historical) {
+          break;
+        }
+
+        // Mantener el comportamiento del cron rápido.
         continue;
       }
 
+
       synced += batch.length;
     }
+
+    if (options?.historical && errors.length > 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "La conciliación histórica no pudo completar el guardado de todas las operaciones.",
+          summary: {
+            synced,
+            failed_batches: errors.length,
+          },
+          errors,
+        },
+        { status: 500 }
+      );
+    }
+
 
     return NextResponse.json({
       ok: errors.length === 0,
@@ -886,51 +968,192 @@ export async function POST() {
       { status: 403 }
     );
   }
+const isLocalDevelopment =
+    process.env.NODE_ENV === "development";
 
-  return syncMentaTransactions();
-}
-
-export async function GET(
-  request: Request
-) {
-  const cronSecret =
-    process.env.CRON_SECRET;
-
-  const authorization =
-    request.headers.get(
-      "authorization"
-    );
-
-  if (
-    !cronSecret ||
-    authorization !==
-      `Bearer ${cronSecret}`
-  ) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "No autorizado.",
-      },
-      { status: 401 }
-    );
-  }
-
-    const url = new URL(request.url);
-    const mode = url.searchParams.get("mode");
-
+  if (isLocalDevelopment) {
     const end = new Date();
     const start = new Date(end);
 
-    if (mode === "fast") {
-      // Sincronización rápida: últimas 2 horas
-      start.setHours(start.getHours() - 2);
-    } else {
-      // Sincronización histórica: últimos 30 días
-      start.setDate(start.getDate() - 30);
-    }
+    // Prueba local: consultar solamente la última hora.
+    start.setHours(start.getHours() - 1);
 
     return syncMentaTransactions({
       start: start.toISOString(),
       end: end.toISOString(),
+      dryRun: true,
     });
+  }
+
+  // Sincronización manual acotada para evitar consultas sin rango.
+  const end = new Date();
+  const start = new Date(end.getTime() - 2 * 60 * 60 * 1000);
+  return syncMentaTransactions({
+    start: start.toISOString(),
+    end: end.toISOString(),
+  });
+
+}
+
+// La sincronización histórica tiene un bloqueo propio para evitar
+// dos procesos históricos concurrentes; cada ventana conserva el
+// bloqueo de transacciones que comparte con el cron rápido.
+const HISTORY_NAME = "menta_transactions_history";
+const HISTORY_LOCK = "menta_transactions_history_runner";
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+const HISTORY_WINDOW_LIMIT = 8;
+const HISTORY_BUDGET_MS = 150_000;
+
+export async function GET(request: Request) {
+  if (process.env.NODE_ENV === "development") {
+    return NextResponse.json(
+      { ok: false, error: "Sincronización GET deshabilitada en desarrollo para proteger producción." },
+      { status: 403 }
+    );
+  }
+
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret || request.headers.get("authorization") !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ ok: false, error: "No autorizado." }, { status: 401 });
+  }
+
+  const mode = new URL(request.url).searchParams.get("mode");
+  if (mode === "fast") {
+    const end = new Date();
+    return syncMentaTransactions({
+      start: new Date(end.getTime() - 2 * HOUR_MS).toISOString(),
+      end: end.toISOString(),
+    });
+  }
+  if (mode !== null && mode !== "history") {
+    return NextResponse.json({ ok: false, error: "Modo de sincronización inválido." }, { status: 400 });
+  }
+
+  let historyToken: string | null = null;
+  const startedAt = Date.now();
+  const completed: Array<{
+    start: string;
+    end: string;
+    synced: number;
+    new_operations: number;
+    changed_operations: number;
+    without_pos: number;
+  }> = [];
+
+  try {
+    const { data: acquiredToken, error: lockError } = await supabase.rpc(
+      "acquire_menta_sync_lock",
+      { p_lock_name: HISTORY_LOCK, p_duration_seconds: 900 }
+    );
+    if (lockError) throw new Error(`No se pudo bloquear el proceso histórico: ${lockError.message}`);
+    if (!acquiredToken) {
+      return NextResponse.json({ ok: true, historical: true, skipped: true, reason: "Ya existe una recuperación histórica en ejecución." });
+    }
+    historyToken = acquiredToken;
+
+    for (let i = 0; i < HISTORY_WINDOW_LIMIT; i++) {
+      if (Date.now() - startedAt >= HISTORY_BUDGET_MS) break;
+
+      const { data: progress, error: readError } = await supabase
+        .from("menta_sync_progress")
+        .select("next_window_start")
+        .eq("sync_name", HISTORY_NAME)
+        .single();
+      if (readError || !progress) {
+        throw new Error(`No se pudo leer el cursor histórico: ${readError?.message ?? "sin registro"}`);
+      }
+
+      const cursor = new Date(progress.next_window_start);
+      if (Number.isNaN(cursor.getTime())) throw new Error("Cursor histórico inválido.");
+      const now = new Date();
+      const oldestAllowed = new Date(now.getTime() - 30 * DAY_MS);
+      const windowStart = new Date(Math.max(cursor.getTime(), oldestAllowed.getTime()));
+
+      // Al completar un barrido, iniciar otro para revisar correcciones
+      // tardías de MENTA dentro de los últimos 30 días.
+      if (windowStart.getTime() >= now.getTime()) {
+        const { data: resetRows, error: resetError } = await supabase
+          .from("menta_sync_progress")
+          .update({ next_window_start: oldestAllowed.toISOString(), updated_at: now.toISOString() })
+          .eq("sync_name", HISTORY_NAME)
+          .eq("next_window_start", progress.next_window_start)
+          .select("sync_name");
+        if (resetError || resetRows?.length !== 1) {
+          throw new Error(`No se pudo reiniciar el barrido histórico: ${resetError?.message ?? "cursor modificado"}`);
+        }
+        break;
+      }
+
+      const windowEnd = new Date(Math.min(windowStart.getTime() + HOUR_MS, now.getTime()));
+      const response = await syncMentaTransactions({
+        start: windowStart.toISOString(),
+        end: windowEnd.toISOString(),
+        historical: true,
+      });
+      const result = await response.json();
+      if (!response.ok || result.ok !== true || result.skipped === true) {
+        const reason = result.skipped
+          ? "La sincronización rápida está utilizando el bloqueo compartido."
+          : result.error ?? "La ventana histórica falló.";
+        // Se conserva el cursor para reintentar la misma ventana.
+        return NextResponse.json(
+          { ok: false, historical: true, cursor_advanced: completed.length > 0,
+            windows_completed: completed.length, completed, failed_window: {
+              start: windowStart.toISOString(), end: windowEnd.toISOString(), reason,
+            } },
+          { status: result.skipped ? 409 : 500 }
+        );
+      }
+
+      const completedAt = new Date().toISOString();
+      const { data: updatedRows, error: updateError } = await supabase
+        .from("menta_sync_progress")
+        .update({
+          next_window_start: windowEnd.toISOString(),
+          last_completed_at: completedAt,
+          updated_at: completedAt,
+        })
+        .eq("sync_name", HISTORY_NAME)
+        .eq("next_window_start", progress.next_window_start)
+        .select("sync_name");
+      if (updateError || updatedRows?.length !== 1) {
+        throw new Error(`La ventana se guardó pero no se pudo avanzar el cursor: ${updateError?.message ?? "cursor modificado"}`);
+      }
+
+      completed.push({
+        start: windowStart.toISOString(),
+        end: windowEnd.toISOString(),
+        synced: result.summary?.synced ?? 0,
+        new_operations: result.summary?.new_operations ?? 0,
+        changed_operations: result.summary?.changed_operations ?? 0,
+        without_pos: result.summary?.without_pos ?? 0,
+      });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      historical: true,
+      windows_completed: completed.length,
+      cursor_advanced: completed.length > 0,
+      completed,
+      elapsed_ms: Date.now() - startedAt,
+    });
+  } catch (error) {
+    console.error("Error en recuperación histórica MENTA:", error);
+    return NextResponse.json(
+      { ok: false, historical: true, cursor_advanced: completed.length > 0,
+        windows_completed: completed.length, completed,
+        error: error instanceof Error ? error.message : "Error histórico desconocido." },
+      { status: 500 }
+    );
+  } finally {
+    if (historyToken) {
+      const { error } = await supabase.rpc("release_menta_sync_lock", {
+        p_lock_name: HISTORY_LOCK,
+        p_lock_token: historyToken,
+      });
+      if (error) console.error("Error liberando bloqueo histórico MENTA:", error.message);
+    }
+  }
 }
