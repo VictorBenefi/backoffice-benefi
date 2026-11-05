@@ -2,6 +2,9 @@ const MENTA_API_URL =
   process.env.MENTA_API_URL ||
   "https://api.menta.global/api";
 
+// Tiempo máximo de espera por solicitud a MENTA.
+const MENTA_REQUEST_TIMEOUT_MS = 30000;
+
 type MentaLoginResponse = {
   token?: {
     access_token?: string;
@@ -56,22 +59,26 @@ async function getAccessToken(
   const { user, password } =
     getCredentials();
 
-  const response = await fetch(
-    `${MENTA_API_URL}/v1/login`,
-    {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type":
-          "application/json",
-      },
-      body: JSON.stringify({
-        user,
-        password,
-      }),
-      cache: "no-store",
-    }
-  );
+
+const response = await fetch(
+  `${MENTA_API_URL}/v1/login`,
+  {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      user,
+      password,
+    }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(
+      MENTA_REQUEST_TIMEOUT_MS
+    ),
+  }
+);
+
 
   let data: MentaLoginResponse | null =
     null;
@@ -116,24 +123,26 @@ async function executeRequest<T>(
   response: Response;
   data: unknown;
 }> {
-  const response = await fetch(
-    `${MENTA_API_URL}${path}`,
-    {
-      method: options.method || "GET",
-      headers: {
-        Authorization:
-          `Bearer ${accessToken}`,
-        Accept: "application/json",
-        "Content-Type":
-          "application/json",
-      },
-      body:
-        options.body !== undefined
-          ? JSON.stringify(options.body)
-          : undefined,
-      cache: "no-store",
-    }
-  );
+
+const response = await fetch(
+  `${MENTA_API_URL}${path}`,
+  {
+    method: options.method || "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body:
+      options.body !== undefined
+        ? JSON.stringify(options.body)
+        : undefined,
+    cache: "no-store",
+    signal: AbortSignal.timeout(
+      MENTA_REQUEST_TIMEOUT_MS
+    ),
+  }
+);
 
   let data: unknown = null;
 
