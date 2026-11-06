@@ -976,6 +976,14 @@ export async function POST(request: Request) {
   const isLocalDevelopment =
     process.env.NODE_ENV === "development";
 
+    console.log("[MENTA RECOVERY] Diagnóstico de entorno", {
+      nodeEnv: process.env.NODE_ENV,
+      vercelEnv: process.env.VERCEL_ENV,
+      isLocalDevelopment,
+      recoverySecretConfigured:
+        Boolean(process.env.MENTA_RECOVERY_SECRET),
+    });
+
   
   // Recuperación puntual administrativa
   const contentType = request.headers.get("content-type") || "";
