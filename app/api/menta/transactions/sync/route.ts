@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { mentaRequest } from "@/lib/menta/client";
 import { getUserRole } from "@/lib/get-user-role";
+import { getAuthUserId } from "@/lib/get-auth-user-id";
+import {
+  createRecoveryToken,
+  verifyRecoveryToken,
+} from "@/lib/menta-recovery-token";
 
 type MentaTransaction = {
   customer_id?: string | null;
@@ -949,7 +954,7 @@ const missingOperations = options?.dryRun
 }
 
 
-export async function POST() {
+export async function POST(request: Request) {
   const role = await getUserRole();
 
   const allowedRoles = [
@@ -962,21 +967,438 @@ export async function POST() {
     return NextResponse.json(
       {
         ok: false,
-        error:
-          "No tenés permisos para sincronizar operaciones con MENTA.",
+        error: "No tenés permisos para sincronizar operaciones con MENTA.",
       },
       { status: 403 }
     );
   }
-const isLocalDevelopment =
+
+  const isLocalDevelopment =
     process.env.NODE_ENV === "development";
 
+  
+  // Recuperación puntual administrativa
+  const contentType = request.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    let body: {
+      action?: string;
+      start?: string;
+      end?: string;
+      recoveryToken?: string;
+    };
+
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { ok: false, error: "Solicitud JSON inválida." },
+        { status: 400 }
+      );
+    }
+
+    if (body?.action !== "verify" && body?.action !== "recover") {
+      return NextResponse.json(
+        { ok: false, error: "Acción administrativa inválida." },
+        { status: 400 }
+      );
+    }
+
+    if (role !== "admin" && role !== "supervisor") {
+      return NextResponse.json(
+        { ok: false, error: "No tenés permisos para recuperar operaciones." },
+        { status: 403 }
+      );
+    }
+
+    const userId = await getAuthUserId();
+
+    if (!userId) {
+      return NextResponse.json(
+        { ok: false, error: "Sesión no válida." },
+        { status: 401 }
+      );
+    }
+
+    if (
+      typeof body.start !== "string" ||
+      typeof body.end !== "string"
+    ) {
+      return NextResponse.json(
+        { ok: false, error: "Debés indicar fecha y hora de inicio y fin." },
+        { status: 400 }
+      );
+    }
+
+    const start = new Date(body.start);
+    const end = new Date(body.end);
+
+    if (
+      !Number.isFinite(start.getTime()) ||
+      !Number.isFinite(end.getTime()) ||
+      start.getTime() >= end.getTime()
+    ) {
+      return NextResponse.json(
+        { ok: false, error: "El rango de fechas es inválido." },
+        { status: 400 }
+      );
+    }
+
+    const maximumRangeMs = 24 * 60 * 60 * 1000;
+
+    if (end.getTime() - start.getTime() > maximumRangeMs) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "El rango máximo permitido es de 24 horas.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (end.getTime() > Date.now()) {
+      return NextResponse.json(
+        { ok: false, error: "No se permiten fechas futuras." },
+        { status: 400 }
+      );
+    }
+
+    const startISO = start.toISOString();
+    const endISO = end.toISOString();
+
+    // 1. Verificar sin modificar operaciones.
+if (body.action === "verify") {
+  const chunks: Array<{
+    start: string;
+    end: string;
+    result: Record<string, unknown>;
+  }> = [];
+
+  const oneHourMs = 60 * 60 * 1000;
+ for (
+    let cursor = start.getTime();
+    cursor < end.getTime();
+    cursor += oneHourMs
+  ) {
+
+    const chunkStart = new Date(cursor).toISOString();
+    const chunkEnd = new Date(
+      Math.min(cursor + oneHourMs, end.getTime())
+    ).toISOString();
+
+    const response = await syncMentaTransactions({
+      start: chunkStart,
+      end: chunkEnd,
+      dryRun: true,
+      historical: true,
+    });
+
+    const chunkResult = await response.json();
+
+    if (
+      !response.ok ||
+      chunkResult.ok !== true ||
+      chunkResult.skipped === true
+    ) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Falló la verificación de uno de los períodos.",
+          failedPeriod: {
+            start: chunkStart,
+            end: chunkEnd,
+          },
+          detail: chunkResult,
+        },
+        { status: response.ok ? 500 : response.status }
+      );
+    }
+
+    chunks.push({
+      start: chunkStart,
+      end: chunkEnd,
+      result: chunkResult,
+    });
+  }
+
+  const summary: Record<string, number> = {};
+
+  for (const chunk of chunks) {
+    const chunkSummary = chunk.result.summary;
+
+    if (
+      chunkSummary &&
+      typeof chunkSummary === "object" &&
+      !Array.isArray(chunkSummary)
+    ) {
+      for (const [key, value] of Object.entries(chunkSummary)) {
+        if (typeof value === "number") {
+          summary[key] = (summary[key] ?? 0) + value;
+        }
+      }
+    }
+  }
+
+      const result = {
+        ok: true,
+        dryRun: true,
+        summary,
+        periods: chunks.length,
+        missing_operations: chunks.flatMap((chunk) =>
+          Array.isArray(chunk.result.missing_operations)
+            ? chunk.result.missing_operations
+            : []
+        ),
+      };
+
+          if (result.ok !== true) {
+      return NextResponse.json(
+        result,
+        { status: 500 }
+      );
+    }
+
+      // En desarrollo solo verificamos.
+      if (isLocalDevelopment) {
+        return NextResponse.json({
+          ...result,
+          recoveryToken: null,
+          recoveryEnabled: false,
+        });
+      }
+
+      const recoveryToken = createRecoveryToken(
+        userId,
+        startISO,
+        endISO
+      );
+
+      return NextResponse.json({
+        ...result,
+        recoveryToken,
+        recoveryEnabled: true,
+      });
+    }
+
+
+    // 2. Recuperar únicamente con autorización válida.
+    if (isLocalDevelopment) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "La recuperación real está deshabilitada en desarrollo.",
+        },
+        { status: 403 }
+      );
+    }
+
+    if (typeof body.recoveryToken !== "string") {
+      return NextResponse.json(
+        { ok: false, error: "Falta la autorización de recuperación." },
+        { status: 403 }
+      );
+    }
+
+    const authorization = verifyRecoveryToken(
+      body.recoveryToken,
+      userId,
+      startISO,
+      endISO
+    );
+
+    if (!authorization) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "La autorización es inválida o venció. Verificá nuevamente.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // 3. Consumir la autorización una sola vez.
+    const { data: consumed, error: consumeError } =
+      await supabase.rpc("consume_menta_recovery_token", {
+        p_jti: authorization.jti,
+        p_user_id: authorization.userId,
+        p_start_at: authorization.start,
+        p_end_at: authorization.end,
+        p_expires_at: new Date(
+          authorization.expiresAt
+        ).toISOString(),
+      });
+
+    if (consumeError) {
+      console.error(
+        "Error consumiendo autorización MENTA:",
+        consumeError.message
+      );
+
+      return NextResponse.json(
+        { ok: false, error: "No se pudo validar la autorización." },
+        { status: 500 }
+      );
+    }
+
+    if (consumed !== true) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Esta autorización ya fue utilizada o venció.",
+        },
+        { status: 409 }
+      );
+    }
+
+    // 4. Bloqueo exclusivo de recuperación administrativa.
+    const recoveryLockName = "menta_transactions_admin_recovery";
+
+    const { data: recoveryLockToken, error: recoveryLockError } =
+      await supabase.rpc("acquire_menta_sync_lock", {
+        p_lock_name: recoveryLockName,
+        p_duration_seconds: 900,
+      });
+
+    if (recoveryLockError) {
+      console.error(
+        "Error adquiriendo bloqueo administrativo MENTA:",
+        recoveryLockError.message
+      );
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "No se pudo iniciar el bloqueo de recuperación.",
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!recoveryLockToken) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Ya existe una recuperación administrativa MENTA en ejecución.",
+        },
+        { status: 409 }
+      );
+    }
+
+    try {
+      // 5. Recuperar el período por tramos de una hora.
+      const oneHourMs = 60 * 60 * 1000;
+
+      const recoveryStartedAt = Date.now();
+      const recoveryBudgetMs = 240_000;
+
+      const recoverySummary: Record<string, number> = {};
+      let completedPeriods = 0;
+
+      for (
+        let cursor = start.getTime();
+        cursor < end.getTime();
+        cursor += oneHourMs
+      ) {
+        // Evitar iniciar otro tramo cerca del límite de Vercel.
+        if (Date.now() - recoveryStartedAt >= recoveryBudgetMs) {
+          return NextResponse.json(
+            {
+              ok: false,
+              error:
+                "La recuperación se detuvo por el límite de tiempo preventivo.",
+              completedPeriods,
+              summary: recoverySummary,
+              message:
+                "Los tramos anteriores pueden haberse guardado. Verificá nuevamente antes de continuar.",
+            },
+            { status: 409 }
+          );
+        }
+
+        const chunkStart = new Date(cursor).toISOString();
+        const chunkEnd = new Date(
+          Math.min(cursor + oneHourMs, end.getTime())
+        ).toISOString();
+
+        const response = await syncMentaTransactions({
+          start: chunkStart,
+          end: chunkEnd,
+          historical: true,
+        });
+
+        const chunkResult = await response.json();
+
+        if (
+          !response.ok ||
+          chunkResult.ok !== true ||
+          chunkResult.skipped === true
+        ) {
+          return NextResponse.json(
+            {
+              ok: false,
+              error: "La recuperación no pudo completarse.",
+              completedPeriods,
+              failedPeriod: {
+                start: chunkStart,
+                end: chunkEnd,
+              },
+              summary: recoverySummary,
+              detail: chunkResult,
+              message:
+                "Los tramos anteriores pueden haberse guardado. Verificá nuevamente antes de reintentar.",
+            },
+            { status: response.ok ? 500 : response.status }
+          );
+        }
+
+        completedPeriods++;
+
+        const chunkSummary = chunkResult.summary;
+
+        if (
+          chunkSummary &&
+          typeof chunkSummary === "object" &&
+          !Array.isArray(chunkSummary)
+        ) {
+          for (const [key, value] of Object.entries(chunkSummary)) {
+            if (typeof value === "number") {
+              recoverySummary[key] =
+                (recoverySummary[key] ?? 0) + value;
+            }
+          }
+        }
+      }
+
+      return NextResponse.json({
+        ok: true,
+        message: "Recuperación del período completada.",
+        completedPeriods,
+        summary: recoverySummary,
+      });
+    } finally {
+      // Liberar el bloqueo administrativo incluso si hay errores.
+      const { error: releaseError } = await supabase.rpc(
+        "release_menta_sync_lock",
+        {
+          p_lock_name: recoveryLockName,
+          p_lock_token: recoveryLockToken,
+        }
+      );
+
+      if (releaseError) {
+        console.error(
+          "Error liberando bloqueo administrativo MENTA:",
+          releaseError.message
+        );
+      }
+    }
+  }
+
+  // Mantener el comportamiento manual existente.
   if (isLocalDevelopment) {
     const end = new Date();
-    const start = new Date(end);
-
-    // Prueba local: consultar solamente la última hora.
-    start.setHours(start.getHours() - 1);
+    const start = new Date(end.getTime() - 60 * 60 * 1000);
 
     return syncMentaTransactions({
       start: start.toISOString(),
@@ -985,14 +1407,13 @@ const isLocalDevelopment =
     });
   }
 
-  // Sincronización manual acotada para evitar consultas sin rango.
   const end = new Date();
   const start = new Date(end.getTime() - 2 * 60 * 60 * 1000);
+
   return syncMentaTransactions({
     start: start.toISOString(),
     end: end.toISOString(),
   });
-
 }
 
 // La sincronización histórica tiene un bloqueo propio para evitar

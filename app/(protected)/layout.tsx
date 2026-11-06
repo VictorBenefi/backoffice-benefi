@@ -70,6 +70,12 @@ export default async function ProtectedLayout({
     },
 
     {
+      href: "/operaciones/recuperacion-menta",
+      label: "Recuperación MENTA",
+      roles: ["admin", "supervisor"],
+    },
+
+    {
       href: "/liquidaciones",
       label: "Liquidaciones",
       roles: ["admin", "supervisor", "operaciones"],
