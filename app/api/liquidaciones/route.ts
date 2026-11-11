@@ -246,16 +246,190 @@ const merchantRate =
   };
 }
 
+const LIQUIDATION_COLUMNS = `
+  merchant_id_benefi,
+  merchant_branch_id_benefi,
+  merchant_payment_date,
+  operation_count,
+  pos_count,
+  pos_codes,
+  gross_amount,
+  merchant_commission,
+  merchant_commission_vat,
+  financial_cost,
+  financial_cost_vat,
+  calculated_net_amount,
+  merchant_net_amount,
+  reconciliation_difference
+`;
+
+const TRANSACTION_COLUMNS = `
+  merchant_id_benefi,
+  merchant_branch_id_benefi,
+  merchant_payment_date,
+  operation_type,
+  payment_method,
+  gross_amount,
+  merchant_net_amount,
+  transaction_datetime,
+  status,
+  tax_info
+`;
+
+async function getTransactionsByPeriod(
+  dateFrom: string,
+  dateTo: string
+) {
+  const transactions = [];
+  const pageSize = 500;
+
+  const current = new Date(`${dateFrom}T00:00:00Z`);
+  const end = new Date(`${dateTo}T00:00:00Z`);
+
+  while (current <= end) {
+    const day = current.toISOString().slice(0, 10);
+    let offset = 0;
+
+    while (true) {
+      const { data, error } = await supabase
+        .from("menta_transactions")
+        .select(TRANSACTION_COLUMNS)
+        .eq("status", "APPROVED")
+        .eq("merchant_payment_date", day)
+        .order("id", { ascending: true })
+        .range(offset, offset + pageSize - 1);
+
+      if (error) {
+        throw new Error(
+          `Operaciones (${day}): ${error.message}`
+        );
+      }
+
+      const rows = data || [];
+      transactions.push(...rows);
+
+      if (rows.length < pageSize) {
+        break;
+      }
+
+      offset += pageSize;
+    }
+
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  return transactions;
+}
+
+async function getLiquidationsByPeriod(
+  dateFrom: string,
+  dateTo: string
+) {
+  const results: Array<
+    Record<string, unknown>
+  > = [];
+
+  const current = new Date(`${dateFrom}T00:00:00Z`);
+  const end = new Date(`${dateTo}T00:00:00Z`);
+
+  while (current <= end) {
+    const day = current.toISOString().slice(0, 10);
+
+    let offset = 0;
+    const pageSize = 500;
+
+    while (true) {
+      const { data, error } = await supabase
+        .from("menta_liquidation_summary")
+        .select(LIQUIDATION_COLUMNS)
+        .gte("merchant_payment_date", day)
+        .lte("merchant_payment_date", day)
+        .order("merchant_payment_date", {
+          ascending: false,
+        })
+        .order("merchant_id_benefi", {
+          ascending: true,
+        })
+        .order("merchant_branch_id_benefi", {
+          ascending: true,
+          nullsFirst: true,
+        })
+        .range(offset, offset + pageSize - 1);
+
+      if (error) {
+        throw new Error(
+          `Liquidaciones (${day}): ${error.message}`
+        );
+      }
+
+      const rows = data || [];
+
+      results.push(...rows);
+
+      if (rows.length < pageSize) {
+        break;
+      }
+
+      offset += pageSize;
+    }
+
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  return results;
+}
+
 export async function GET(request: Request) {
   try {
 
     const { searchParams } = new URL(request.url);
 
-    const dateFrom =
-      searchParams.get("dateFrom");
+    const dateFrom = searchParams.get("dateFrom");
+    const dateTo = searchParams.get("dateTo");
 
-    const dateTo =
-      searchParams.get("dateTo");
+    const validDate = (value: string | null) => {
+      if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return false;
+      }
+
+      const date = new Date(`${value}T00:00:00Z`);
+
+      return (
+        !Number.isNaN(date.getTime()) &&
+        date.toISOString().slice(0, 10) === value
+      );
+    };
+
+    if (!validDate(dateFrom) || !validDate(dateTo)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Seleccioná un rango de fechas válido.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const from = dateFrom!;
+    const to = dateTo!;
+
+    const [fromYear, fromMonth] = from.split("-").map(Number);
+    const [toYear, toMonth] = to.split("-").map(Number);
+
+    const monthDifference =
+      (toYear - fromYear) * 12 + (toMonth - fromMonth);
+
+    if (from > to || monthDifference > 2) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "El período de consulta no puede superar 3 meses calendario.",
+        },
+        { status: 400 }
+      );
+    }
+
     const role = await getUserRole();
 
     const allowedRoles = [
@@ -275,6 +449,7 @@ export async function GET(request: Request) {
       );
     }
 
+    const inicioConsulta = performance.now();
     const [
       liquidationsResult,
       merchantsResult,
@@ -282,35 +457,7 @@ export async function GET(request: Request) {
       paymentCostsResult,
       transactionsResult,
     ] = await Promise.all([
-      supabase
-        .from("menta_liquidation_summary")
-        .select(`
-        merchant_id_benefi,
-        merchant_branch_id_benefi,
-        merchant_payment_date,
-        operation_count,
-        pos_count,
-        pos_codes,
-        gross_amount,
-        merchant_commission,
-        merchant_commission_vat,
-        financial_cost,
-        financial_cost_vat,
-        calculated_net_amount,
-        merchant_net_amount,
-        reconciliation_difference
-        `)
-        .gte(
-          "merchant_payment_date",
-          dateFrom || "1970-01-01"
-        )
-        .lte(
-          "merchant_payment_date",
-          dateTo || "2999-12-31"
-        )
-        .order("merchant_payment_date", {
-          ascending: false,
-        }),
+      getLiquidationsByPeriod(from, to),
 
       supabase
         .from("merchants")
@@ -347,41 +494,15 @@ export async function GET(request: Request) {
         ascending: false,
       }),
 
-      supabase
-      .from("menta_transactions")
-      .select(`
-        merchant_id_benefi,
-        merchant_branch_id_benefi,
-        merchant_payment_date,
-        operation_type,
-        payment_method,
-        gross_amount,
-        merchant_net_amount,
-        transaction_datetime,
-        status,
-        tax_info
-      `)
-      .eq("status", "APPROVED")
-      .not("merchant_payment_date", "is", null)
-      .gte(
-        "merchant_payment_date",
-        dateFrom || "1970-01-01"
-      )
-      .lte(
-        "merchant_payment_date",
-        dateTo || "2999-12-31"
-      )
-      .order("merchant_payment_date", {
-        ascending: false,
-      })
-      .limit(1000),
+      getTransactionsByPeriod(from, to),
     ]);
+    console.log(
+      "[Liquidaciones] Consultas Supabase:",
+      Math.round(performance.now() - inicioConsulta),
+      "ms"
+    );
 
-    if (liquidationsResult.error) {
-      throw new Error(
-        `Liquidaciones: ${liquidationsResult.error.message}`
-      );
-    }
+    const liquidationsData = liquidationsResult;
 
     if (merchantsResult.error) {
       throw new Error(
@@ -401,84 +522,95 @@ export async function GET(request: Request) {
       );
     }
 
-    if (transactionsResult.error) {
-      throw new Error(
-        `Operaciones: ${transactionsResult.error.message}`
-      );
-    }
-
+    
     const paymentCosts =
   paymentCostsResult.data || [];
 
-const transactions =
-  transactionsResult.data || [];
+const transactions = transactionsResult;
 
-const liquidationsWithEconomics =
-  (liquidationsResult.data || []).map(
-    (liquidation) => {
-      const liquidationTransactions =
-        transactions.filter((transaction) => {
-          if (
-            transaction.merchant_id_benefi !==
-            liquidation.merchant_id_benefi
-          ) {
-            return false;
-          }
 
-          if (
-            transaction.merchant_payment_date !==
-            liquidation.merchant_payment_date
-          ) {
-            return false;
-          }
+type EconomicsTotals = {
+  merchantFee: number;
+  acquirerCost: number;
+  mentaCost: number;
+  pandaCost: number;
+  benefiProfit: number;
+};
 
-          const transactionBranch =
-            transaction.merchant_branch_id_benefi ||
-            null;
+const transactionGroups = new Map<
+  string,
+  EconomicsTotals
+>();
 
-          const liquidationBranch =
-            liquidation.merchant_branch_id_benefi ||
-            null;
+const getGroupKey = (
+  merchantId: unknown,
+  paymentDate: unknown,
+  branchId: unknown
+) =>
+  JSON.stringify([
+    merchantId ?? null,
+    paymentDate ?? null,
+    branchId || null,
+  ]);
 
-          return (
-            transactionBranch ===
-            liquidationBranch
-          );
-        });
-
-      let merchantFee = 0;
-      let acquirerCost = 0;
-      let mentaCost = 0;
-      let pandaCost = 0;
-      let benefiProfit = 0;
-
-      for (const transaction of liquidationTransactions) {
-        const economics =
-          getTransactionEconomics(
-            transaction,
-            paymentCosts
-          );
-
-        merchantFee += economics.merchantFee;
-        acquirerCost += economics.acquirerCost;
-        mentaCost += economics.mentaCost;
-        pandaCost += economics.pandaCost;
-        benefiProfit += economics.benefiProfit;
-      }
-
-      return {
-        ...liquidation,
-
-        benefi_economics: {
-          merchant_fee: merchantFee,
-          acquirer_cost: acquirerCost,
-          menta_cost: mentaCost,
-          panda_cost: pandaCost,
-          benefi_profit: benefiProfit,
-        },
-      };
-    }
+// Agrupamos y calculamos cada operación una sola vez.
+for (const transaction of transactions) {
+  const key = getGroupKey(
+    transaction.merchant_id_benefi,
+    transaction.merchant_payment_date,
+    transaction.merchant_branch_id_benefi
   );
+
+  let totals = transactionGroups.get(key);
+
+  if (!totals) {
+    totals = {
+      merchantFee: 0,
+      acquirerCost: 0,
+      mentaCost: 0,
+      pandaCost: 0,
+      benefiProfit: 0,
+    };
+
+    transactionGroups.set(key, totals);
+  }
+
+  const economics = getTransactionEconomics(
+    transaction,
+    paymentCosts
+  );
+
+  totals.merchantFee += economics.merchantFee;
+  totals.acquirerCost += economics.acquirerCost;
+  totals.mentaCost += economics.mentaCost;
+  totals.pandaCost += economics.pandaCost;
+  totals.benefiProfit += economics.benefiProfit;
+}
+
+// Cada liquidación consulta únicamente su grupo.
+const liquidationsWithEconomics =
+  liquidationsData.map((liquidation) => {
+    const key = getGroupKey(
+      liquidation.merchant_id_benefi,
+      liquidation.merchant_payment_date,
+      liquidation.merchant_branch_id_benefi
+    );
+
+    const totals = transactionGroups.get(key);
+
+    return {
+      ...liquidation,
+
+      benefi_economics: {
+        merchant_fee: totals?.merchantFee ?? 0,
+        acquirer_cost: totals?.acquirerCost ?? 0,
+        menta_cost: totals?.mentaCost ?? 0,
+        panda_cost: totals?.pandaCost ?? 0,
+        benefi_profit: totals?.benefiProfit ?? 0,
+      },
+    };
+  });
+
 
     return NextResponse.json({
       ok: true,
