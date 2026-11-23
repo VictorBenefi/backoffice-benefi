@@ -70,6 +70,11 @@ export default function LoginPage() {
       return;
     }
 
+    if (appUser.role === "socio") {
+      router.push("/portal-socios");
+      return;
+    }
+
     router.push("/dashboard");
   };
 

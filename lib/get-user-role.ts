@@ -27,7 +27,7 @@ export async function getUserRole() {
 
   const { data, error } = await supabase
     .from("app_users")
-    .select("role, email")
+    .select("role, email, is_active")
     .eq("email", normalizedEmail)
     .limit(1);
 
@@ -36,5 +36,11 @@ export async function getUserRole() {
     return null;
   }
 
-  return data?.[0]?.role || null;
+  const appUser = data?.[0];
+
+  if (!appUser || appUser.is_active === false) {
+    return null;
+  }
+
+  return appUser.role || null;
 }

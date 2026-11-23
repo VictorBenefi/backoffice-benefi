@@ -1,5 +1,6 @@
 import { getUserRole } from "@/lib/get-user-role";
 import ResponsiveProtectedShell from "@/components/responsive-protected-shell";
+import { redirect } from "next/navigation";
 
 export default async function ProtectedLayout({
   children,
@@ -8,7 +9,19 @@ export default async function ProtectedLayout({
 }) {
   const role = await getUserRole();
 
-  const menu = [
+    if (role === "socio") {
+      redirect("/portal-socios");
+    }
+
+    if (role === "merchant") {
+      redirect("/portal-comercio");
+    }
+
+    if (!role) {
+      redirect("/login");
+    }
+
+    const menu = [
     {
       href: "/dashboard",
       label: "Dashboard",

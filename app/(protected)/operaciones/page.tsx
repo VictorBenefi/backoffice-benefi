@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { Search } from "lucide-react";
+import {
+  getOperationEconomics as calculateOperationEconomics,
+} from "@/lib/operaciones-economics";
 
 type Transaction = {
   id: string;
@@ -293,222 +296,6 @@ function getCardDetailValue(
   return String(value);
 }
 
-function getTaxRate(
-  taxInfo: Record<string, unknown> | null,
-  taxType: string
-) {
-  if (!taxInfo) return null;
-
-  const taxBreakdown = taxInfo.tax_breakdown;
-
-  if (!Array.isArray(taxBreakdown)) {
-    return null;
-  }
-
-  const item = taxBreakdown.find((entry) => {
-    if (
-      !entry ||
-      typeof entry !== "object" ||
-      Array.isArray(entry)
-    ) {
-      return false;
-    }
-
-    const data = entry as Record<string, unknown>;
-
-    return data.tax_code === taxType;
-  });
-
-  if (
-    !item ||
-    typeof item !== "object" ||
-    Array.isArray(item)
-  ) {
-    return null;
-  }
-
-  const data = item as Record<string, unknown>;
-  const rate = Number(data.rate);
-
-  return Number.isFinite(rate) ? rate : null;
-}
-
-function getMerchantRate(
-  transaction: Transaction
-) {
-  return getTaxRate(
-    transaction.tax_info,
-    "CUSTOMER_TO_MERCHANT_COMMISSION"
-  );
-}
-
-function getAcquirerRate(
-  transaction: Transaction
-) {
-  return getTaxRate(
-    transaction.tax_info,
-    "ACQUIRER_TO_CUSTOMER_COMMISSION"
-  );
-}
-
-function getPaymentCostSetting(
-  transaction: Transaction,
-  paymentCosts: PaymentCostSetting[]
-) {
-  const paymentMethod = normalize(
-    transaction.payment_method
-  );
-
-  if (!transaction.transaction_datetime) {
-    return null;
-  }
-
-  const transactionDate =
-    transaction.transaction_datetime.slice(0, 10);
-
-  return (
-    paymentCosts.find((setting) => {
-      if (
-        normalize(setting.payment_method) !==
-        paymentMethod
-      ) {
-        return false;
-      }
-
-      if (transactionDate < setting.valid_from) {
-        return false;
-      }
-
-      if (
-        setting.valid_to &&
-        transactionDate > setting.valid_to
-      ) {
-        return false;
-      }
-
-      return true;
-    }) || null
-  );
-}
-
-function getOperationRates(
-  transaction: Transaction,
-  paymentCosts: PaymentCostSetting[]
-) {
-  const paymentMethod = normalize(
-    transaction.payment_method
-  );
-
-  const setting = getPaymentCostSetting(
-    transaction,
-    paymentCosts
-  );
-
-  if (!setting) {
-    return null;
-  }
-
-  const grossAmount = Number(
-    transaction.gross_amount || 0
-  );
-
-  const merchantNetAmount = Number(
-    transaction.merchant_net_amount || 0
-  );
-
-  if (
-    paymentMethod === "QR" &&
-    Math.abs(grossAmount - merchantNetAmount) <= 0.01
-  ) {
-    return {
-      merchantRate: 0,
-      acquirerRate: 0,
-      mentaRate: 0,
-      pandaRate: 0,
-    };
-  }
-
-  const merchantRate =
-    getMerchantRate(transaction) ?? 0;
-
-  const acquirerRate =
-    paymentMethod === "QR"
-      ? Number(setting.acquirer_rate || 0)
-      : getAcquirerRate(transaction) ??
-        Number(setting.acquirer_rate || 0);
-
-  return {
-    merchantRate,
-    acquirerRate,
-    mentaRate: Number(setting.menta_rate || 0),
-    pandaRate: Number(setting.panda_rate || 0),
-  };
-}
-
-function getOperationEconomics(
-  transaction: Transaction,
-  paymentCosts: PaymentCostSetting[]
-) {
-  const isApproved =
-  normalize(transaction.status) === "APPROVED";
-
-  const isCancellation =
-    isRefundOrCancellation(transaction);
-
-  if (!isApproved || isCancellation) {
-    return {
-      merchantRate: 0,
-      acquirerRate: 0,
-      mentaRate: 0,
-      pandaRate: 0,
-      merchantFee: 0,
-      acquirerCost: 0,
-      mentaCost: 0,
-      pandaCost: 0,
-      benefiProfit: 0,
-    };
-  }
-
-  const rates = getOperationRates(
-    transaction,
-    paymentCosts
-  );
-
-  if (!rates) {
-    return null;
-  }
-
-  const grossAmount = Number(
-    transaction.gross_amount || 0
-  );
-
-  const merchantFee =
-    grossAmount * (rates.merchantRate / 100);
-
-  const acquirerCost =
-    grossAmount * (rates.acquirerRate / 100);
-
-  const mentaCost =
-    grossAmount * (rates.mentaRate / 100);
-
-  const pandaCost =
-    grossAmount * (rates.pandaRate / 100);
-
-  const benefiProfit =
-    merchantFee -
-    acquirerCost -
-    mentaCost -
-    pandaCost;
-
-  return {
-    ...rates,
-    merchantFee,
-    acquirerCost,
-    mentaCost,
-    pandaCost,
-    benefiProfit,
-  };
-}
 
 function paymentMethodLabel(value: string | null) {
   switch (normalize(value)) {
@@ -1963,7 +1750,7 @@ function OperationRow({
       {/* Arancel comercio */}
       <td className="whitespace-nowrap px-4 py-3 text-right">
         {(() => {
-          const economics = getOperationEconomics(
+          const economics = calculateOperationEconomics(
             transaction,
             paymentCosts
           );
@@ -1996,7 +1783,7 @@ function OperationRow({
       {/* Adquirente */}
       <td className="whitespace-nowrap px-4 py-3 text-right">
         {(() => {
-          const economics = getOperationEconomics(
+          const economics = calculateOperationEconomics(
             transaction,
             paymentCosts
           );
@@ -2029,7 +1816,7 @@ function OperationRow({
             {/* MENTA */}
             <td className="whitespace-nowrap px-4 py-3 text-right">
               {(() => {
-                const economics = getOperationEconomics(
+                const economics = calculateOperationEconomics(
                   transaction,
                   paymentCosts
                 );
@@ -2061,7 +1848,7 @@ function OperationRow({
             {/* Panda */}
       <td className="whitespace-nowrap px-4 py-3 text-right">
         {(() => {
-          const economics = getOperationEconomics(
+          const economics = calculateOperationEconomics(
             transaction,
             paymentCosts
           );
@@ -2094,7 +1881,7 @@ function OperationRow({
       {/* Rentabilidad BENEFÍ */}
       <td className="whitespace-nowrap px-4 py-3 text-right">
         {(() => {
-          const economics = getOperationEconomics(
+          const economics = calculateOperationEconomics(
             transaction,
             paymentCosts
           );

@@ -24,6 +24,7 @@ const allowedRoles = [
   "supervisor",
   "vendedor",
   "soporte",
+  "socio",
 ];
 
 export async function POST(req: Request) {

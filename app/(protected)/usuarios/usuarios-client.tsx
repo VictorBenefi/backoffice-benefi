@@ -67,9 +67,9 @@ export default function UsuariosClient() {
   useState(initialForm);
 
   const [userType, setUserType] =
-    useState<"backoffice" | "merchant">(
-      "backoffice"
-    );
+  useState<"backoffice" | "merchant" | "socio">(
+    "backoffice"
+  );
 
   const [
   merchantAccessLevel,
@@ -455,11 +455,14 @@ try {
                 : "group_admin",
         }
       : {
-          name,
-          email,
-          password: formData.password,
-          role: formData.role,
-        };
+        name,
+        email,
+        password: formData.password,
+        role:
+          userType === "socio"
+            ? "socio"
+            : formData.role,
+      };
 
   const response = await fetch(
     endpoint,
@@ -741,7 +744,7 @@ try {
                 bordered
               >
                 <Field label="Tipo de usuario">
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3 sm:grid-cols-3">
                     <button
                       type="button"
                       onClick={() =>
@@ -783,6 +786,27 @@ try {
                       <p className="mt-1 text-xs leading-5 text-slate-500">
                         Usuario perteneciente a un
                         comercio, marca o grupo.
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setUserType("socio")}
+                      disabled={creating}
+                      className={`rounded-xl border p-4 text-left transition ${
+                        userType === "socio"
+                          ? "border-blue-500 bg-blue-50 ring-2 ring-blue-500/10"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <p className="font-semibold text-slate-950">
+                        Portal Socios
+                      </p>
+
+                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                        Acceso ejecutivo a los indicadores,
+                        operaciones y rentabilidad global de BENEFÍ.
+                        Solo lectura.
                       </p>
                     </button>
                   </div>
@@ -830,6 +854,24 @@ try {
                       </p>
                     </div>
                   </>
+                ) : userType === "socio" ? (
+                  <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                    <p className="text-sm font-semibold text-blue-950">
+                      Socio BENEFÍ
+                    </p>
+
+                    <p className="mt-1 text-xs leading-5 text-blue-700">
+                      Acceso al Portal de Socios para consultar
+                      el Dashboard ejecutivo, las operaciones
+                      y la rentabilidad mensual global de BENEFÍ.
+                      No requiere vinculación con comercios,
+                      marcas, grupos ni sucursales.
+                    </p>
+
+                    <p className="mt-2 text-xs font-medium text-blue-800">
+                      Permisos: solo lectura.
+                    </p>
+                  </div>
                 ) : (
                   <>
                     <div className="mt-5">
