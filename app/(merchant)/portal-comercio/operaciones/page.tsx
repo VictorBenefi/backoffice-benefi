@@ -352,7 +352,7 @@ export default function OperacionesPage() {
   const [branchFilter, setBranchFilter] =
     useState("");
 
-  const [posFilter, setPosFilter] = useState("");
+  const [posFilter, setPosFilter] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState("");
   const [paymentFilter, setPaymentFilter] =
     useState("");
@@ -525,8 +525,8 @@ const filteredTransactions = useMemo(() => {
       }
 
       if (
-        posFilter &&
-        transaction.pos_id !== posFilter
+        posFilter.length > 0 &&
+        !posFilter.includes(transaction.pos_id || "")
       ) {
         return false;
       }
@@ -834,7 +834,7 @@ const handleExportExcel = () => {
     setDateTo(today());
     setMerchantFilter("");
     setBranchFilter("");
-    setPosFilter("");
+    setPosFilter([]);
     setStatusFilter("");
     setPaymentFilter("");
     setOperationTypeFilter("");
@@ -842,39 +842,47 @@ const handleExportExcel = () => {
   };
 
 useEffect(() => {
-  if (!posFilter) {
-    return;
-  }
+  setPosFilter((current) => {
+    const validPos = current.filter((posId) => {
+      const pos = posDevices.find(
+        (item) => item.id === posId
+      );
 
-  const selectedPos = posDevices.find(
-    (pos) => pos.id === posFilter
-  );
+      if (!pos) {
+        return false;
+      }
 
-  if (!selectedPos) {
-    setPosFilter("");
-    return;
-  }
+      if (
+        merchantFilter &&
+        pos.merchant_id !== merchantFilter
+      ) {
+        return false;
+      }
 
-  if (
-    merchantFilter &&
-    selectedPos.merchant_id !== merchantFilter
-  ) {
-    setPosFilter("");
-    return;
-  }
+      if (
+        branchFilter &&
+        pos.merchant_branch_id !== branchFilter
+      ) {
+        return false;
+      }
 
-  if (
-    branchFilter &&
-    selectedPos.merchant_branch_id !== branchFilter
-  ) {
-    setPosFilter("");
-  }
+      return true;
+    });
+
+    if (
+      validPos.length === current.length
+    ) {
+      return current;
+    }
+
+    return validPos;
+  });
 }, [
   merchantFilter,
   branchFilter,
-  posFilter,
   posDevices,
 ]);
+
   return (
     <main className="min-h-screen min-w-0 overflow-x-hidden bg-slate-50 p-4 md:p-6">
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -1037,24 +1045,81 @@ useEffect(() => {
           </FilterField>
 
           <FilterField label="POS">
-            <select
-              value={posFilter}
-              onChange={(event) =>
-                setPosFilter(event.target.value)
-              }
-              className={inputClass}
+          <details className="relative group">
+            <summary
+              className={`${inputClass} flex cursor-pointer list-none items-center justify-between`}
             >
-              <option value="">Todos los POS</option>
+              <span>
+                {posFilter.length === 0
+                  ? "Todos los POS"
+                  : posFilter.length === 1
+                  ? "1 POS seleccionado"
+                  : `${posFilter.length} POS seleccionados`}
+              </span>
 
-              {filteredPosDevices.map((pos) => (
-                <option key={pos.id} value={pos.id}>
-                    {pos.code ||
-                    pos.serial ||
-                    "POS sin código"}
-                </option>
+              <span className="text-slate-500">▼</span>
+            </summary>
+
+            <div className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full min-w-56 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
+              <div className="mb-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.currentTarget.closest("details")?.removeAttribute("open");
+                  }}
+                  className="rounded-md px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-50"
+                >
+                  Listo ✓
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPosFilter([])}
+                className="mb-2 w-full rounded-md px-3 py-2 text-left text-sm font-medium text-blue-700 hover:bg-blue-50"
+              >
+                Todos los POS
+              </button>
+
+              <div className="border-t border-slate-100 pt-2">
+                {filteredPosDevices.map((pos) => (
+                  <label
+                    key={pos.id}
+                    className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-slate-50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={posFilter.includes(pos.id)}
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+
+                        setPosFilter((current) =>
+                          checked
+                            ? [...current, pos.id]
+                            : current.filter(
+                                (id) => id !== pos.id
+                              )
+                        );
+                      }}
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+
+                    <span>
+                      {pos.code ||
+                        pos.serial ||
+                        "POS sin código"}
+                    </span>
+                  </label>
                 ))}
-            </select>
-          </FilterField>
+
+                {filteredPosDevices.length === 0 && (
+                  <p className="px-3 py-2 text-sm text-slate-500">
+                    No hay POS disponibles.
+                  </p>
+                )}
+              </div>
+            </div>
+          </details>
+        </FilterField>
 
           <FilterField label="Tipo de operación">
             <select
