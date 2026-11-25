@@ -2,6 +2,13 @@
 import "server-only";
 
 import { mentaRequest } from "@/lib/menta/client";
+import {
+  getPosShiftDataSource,
+} from "@/lib/pos/shift-data-source";
+
+import {
+  getSimulatedShiftTransactions,
+} from "@/lib/pos/shift-simulated-transactions";
 
 export type MentaShiftTransaction = {
   merchant_id?: string | null;
@@ -93,6 +100,24 @@ export async function getMentaShiftTransactions({
     throw new Error(
       "El período del cierre no es válido."
     );
+  }
+
+    const source = getPosShiftDataSource();
+
+  if (source === "SIMULATED") {
+
+    if (!normalizedMerchantId) {
+      throw new Error(
+        "El comercio de integración no está identificado."
+      );
+    }
+
+    return getSimulatedShiftTransactions({
+      merchantId: normalizedMerchantId,
+      terminalIds: Array.from(normalizedTerminalIds),
+      start,
+      end,
+    });
   }
 
   async function loadPage(page: number) {

@@ -13,6 +13,10 @@ import {
 } from "@/lib/menta/shift-transactions";
 
 import {
+  getPosShiftDataSource,
+} from "@/lib/pos/shift-data-source";
+
+import {
   buildPosShiftSummary,
 } from "@/lib/pos-shift-summary";
 
@@ -565,7 +569,7 @@ console.info("[POS SHIFT] Consultas por comercio", {
   );
 
   return {
-    source: "MENTA_DIRECT" as const,
+      source: getPosShiftDataSource(),
 
     period: {
       from: earliestStart,
