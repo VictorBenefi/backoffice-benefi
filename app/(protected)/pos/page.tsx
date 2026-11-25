@@ -19,5 +19,5 @@ export default async function PosPage() {
     redirect("/dashboard");
   }
 
-  return <PosClient canDeletePos={permissions?.can_delete_pos ?? false} />;
+  return <PosClient canDeletePos={permissions?.can_delete_pos ?? false} canConfigureShift={role === "admin"} />;
 }

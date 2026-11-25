@@ -213,38 +213,63 @@ async function fetchMerchantAccessOptions() {
 }
 
   async function toggleActive(user: AppUser) {
-    const nextValue = !user.is_active;
+  const nextValue = !user.is_active;
 
-    setSavingId(user.id);
+  setSavingId(user.id);
 
-    const { error } = await supabase
-      .from("app_users")
-      .update({ is_active: nextValue })
-      .eq("id", user.id);
+  try {
+    const response = await fetch(
+      "/api/admin/update-user-status",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          isActive: nextValue,
+        }),
+      }
+    );
 
-    setSavingId(null);
+    const result = await response
+      .json()
+      .catch(() => null);
 
-    if (error) {
+    if (!response.ok || !result?.ok) {
       toast.error(
-        `Error actualizando estado: ${error.message}`
+        result?.error ||
+          "No se pudo actualizar el usuario."
       );
       return;
     }
+
+    setUsers((previous) =>
+      previous.map((item) =>
+        item.id === user.id
+          ? {
+              ...item,
+              is_active: result.user.is_active,
+            }
+          : item
+      )
+    );
 
     toast.success(
       nextValue
         ? "Usuario activado correctamente."
         : "Usuario inactivado correctamente."
     );
+  } catch (error) {
+    console.error(error);
 
-    setUsers((previous) =>
-      previous.map((item) =>
-        item.id === user.id
-          ? { ...item, is_active: nextValue }
-          : item
-      )
+    toast.error(
+      "Error al actualizar el estado del usuario."
     );
+  } finally {
+    setSavingId(null);
   }
+}
 
   function openResetModal(user: AppUser) {
     setResetUser(user);

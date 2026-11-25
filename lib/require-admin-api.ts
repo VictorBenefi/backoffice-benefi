@@ -42,7 +42,7 @@ export async function requireAdminApi() {
   if (
     appUserError ||
     !appUser ||
-    appUser.is_active === false ||
+    appUser.is_active !== true ||
     appUser.role !== "admin"
   ) {
     return null;

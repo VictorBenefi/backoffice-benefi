@@ -66,8 +66,10 @@ const initialForm = {
 
 export default function PosClient({
   canDeletePos,
+  canConfigureShift,
 }: {
   canDeletePos: boolean;
+  canConfigureShift: boolean;
 }) {
   const supabase = createClient();
 
@@ -79,6 +81,59 @@ export default function PosClient({
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [shiftConfig, setShiftConfig] = useState<{
+    posId: string; enabledFrom: string | null; locked: boolean;
+  } | null>(null);
+  const [shiftDate, setShiftDate] = useState("");
+  const [shiftBusy, setShiftBusy] = useState(false);
+  const [shiftError, setShiftError] = useState("");
+
+  const formatShiftDate = (value: string | null) =>
+    value ? new Date(Date.parse(value) - 3 * 3600000).toISOString().slice(0, 19) : "";
+
+  useEffect(() => {
+    setShiftConfig(null);
+    setShiftDate("");
+    setShiftError("");
+    if (!canConfigureShift || !editingId) return;
+    const controller = new AbortController();
+    fetch(`/api/admin/pos-shift-config?posId=${encodeURIComponent(editingId)}`, {
+      signal: controller.signal, cache: "no-store",
+    }).then(async (response) => {
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw new Error(result.error || "No se pudo consultar la habilitación.");
+      if (controller.signal.aborted) return;
+      setShiftConfig(result.config);
+      setShiftDate(formatShiftDate(result.config.enabledFrom));
+    }).catch((error) => {
+      if (!controller.signal.aborted) setShiftError(error.message);
+    });
+    return () => controller.abort();
+  }, [editingId, canConfigureShift]);
+
+  const saveShiftConfig = async (disable = false) => {
+    if (!editingId || shiftConfig?.posId !== editingId || shiftConfig.locked || shiftBusy) return;
+    setShiftBusy(true);
+    setShiftError("");
+    try {
+      const response = await fetch("/api/admin/pos-shift-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ posId: editingId, enabledFrom: disable ? null : shiftDate || null,
+          expectedEnabledFrom: shiftConfig.enabledFrom }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw new Error(result.error || "No se pudo guardar la habilitación.");
+      setShiftConfig(result.config);
+      setShiftDate(formatShiftDate(result.config.enabledFrom));
+      setMessage({ type: "success", text: "Habilitación de cierre de turno actualizada." });
+    } catch (error) {
+      setShiftError(error instanceof Error ? error.message : "Error al guardar.");
+    } finally {
+      setShiftBusy(false);
+    }
+  };
+
 
   const [currentRole, setCurrentRole] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -87,6 +142,8 @@ export default function PosClient({
   const [message, setMessage] =
     useState<NotificationMessage | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [disableShiftModalOpen, setDisableShiftModalOpen] =
+  useState(false);
   const [posToDelete, setPosToDelete] = useState<PosDevice | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -512,6 +569,7 @@ export default function PosClient({
   };
 
   const handleEdit = (pos: PosDevice) => {
+    if (shiftBusy) return;
     setMessage(null);
     setEditingId(pos.id);
     setFormData({
@@ -547,7 +605,7 @@ export default function PosClient({
   };
 
   const confirmDelete = async () => {
-    if (!posToDelete) return;
+    if (!posToDelete || shiftBusy) return;
 
     setDeleting(true);
     setMessage(null);
@@ -590,6 +648,7 @@ export default function PosClient({
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (shiftBusy) return;
     setMessage(null);
 
     if (!validateForm()) return;
@@ -930,6 +989,53 @@ export default function PosClient({
                   />
                 </div>
 
+                {canConfigureShift && editingId ? (
+                  <section className="space-y-3 rounded-lg border border-slate-200 p-4">
+                    <h3 className="font-semibold text-slate-900">Habilitación de cierre de turno</h3>
+                    {shiftError ? <p className="text-sm text-red-700">{shiftError}</p> : null}
+                    {shiftConfig?.posId === editingId ? (
+                      <>
+                        <p className="text-sm text-slate-600">
+                          {shiftConfig.locked ? "Bloqueada: ya existen cierres registrados" : shiftConfig.enabledFrom ? "Fecha configurada" : "Sin habilitar"}
+                        </p>
+                        <label className={labelClassName}>Fecha y hora inicial (Argentina, UTC-3)</label>
+                        <input type="datetime-local" step={1} className={fieldClassName}
+                          value={shiftDate} onChange={(event) => setShiftDate(event.target.value)}
+                          disabled={shiftConfig.locked || shiftBusy || loading} />
+                        <p className="text-xs text-slate-500">
+                          El primer turno comienza en esta fecha.
+                          Después del primer cierre no se puede modificar.
+                        </p>
+
+                        {!shiftConfig.locked ? (
+                          <div className="flex flex-col gap-2">
+                            <PrimaryButton
+                              type="button"
+                              onClick={() => saveShiftConfig()}
+                              loading={shiftBusy}
+                              disabled={loading || !shiftDate}
+                              loadingLabel="Guardando..."
+                            >
+                              Guardar habilitación
+                            </PrimaryButton>
+
+                            {shiftConfig.enabledFrom ? (
+                              <button
+                                type="button"
+                                disabled={loading || shiftBusy}
+                                onClick={() => setDisableShiftModalOpen(true)}
+                                className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                              >
+                                Deshabilitar cierre de turno
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </>
+                    ) : !shiftError ? <p className="text-sm text-slate-500">Consultando habilitación...</p> : null}
+                  </section>
+                ) : null}
+
                 <div className="flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row">
                   <PrimaryButton
                     type="submit"
@@ -943,7 +1049,7 @@ export default function PosClient({
                     <SecondaryButton
                       type="button"
                       onClick={resetForm}
-                      disabled={loading}
+                      disabled={loading || shiftBusy}
                     >
                       Cancelar edición
                     </SecondaryButton>
@@ -1250,6 +1356,23 @@ export default function PosClient({
         onConfirm={confirmDelete}
         onCancel={cancelDelete}
       />
+      <ConfirmModal
+      open={disableShiftModalOpen}
+      title="Deshabilitar cierre de turno"
+      description={`¿Confirmás deshabilitar el cierre de turno del POS ${formData.code}? La fecha de habilitación será eliminada y podrás configurar una nueva posteriormente.`}
+      confirmLabel="Deshabilitar"
+      cancelLabel="Cancelar"
+      loading={shiftBusy}
+      onConfirm={async () => {
+        await saveShiftConfig(true);
+        setDisableShiftModalOpen(false);
+      }}
+      onCancel={() => {
+        if (!shiftBusy) {
+          setDisableShiftModalOpen(false);
+        }
+      }}
+    />
     </main>
   );
 }
