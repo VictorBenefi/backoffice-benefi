@@ -81,6 +81,9 @@ const response = await fetch(
       password,
     }),
     cache: "no-store",
+    redirect: isPosIntegrationEnvironment()
+  ? "error"
+  : "follow",
     signal: AbortSignal.timeout(
       MENTA_REQUEST_TIMEOUT_MS
     ),
@@ -98,6 +101,11 @@ const response = await fetch(
   }
 
   if (!response.ok) {
+        if (isPosIntegrationEnvironment()) {
+      throw new Error(
+        `MENTA login respondió ${response.status}.`
+      );
+    }
     throw new Error(
       `MENTA login respondió ${response.status}: ${JSON.stringify(
         data
@@ -146,6 +154,9 @@ const response = await fetch(
         ? JSON.stringify(options.body)
         : undefined,
     cache: "no-store",
+    redirect: isPosIntegrationEnvironment()
+  ? "error"
+  : "follow",
     signal: AbortSignal.timeout(
       MENTA_REQUEST_TIMEOUT_MS
     ),
@@ -181,6 +192,14 @@ function validateMentaIntegrationRequest(
   }
 
   if (
+    MENTA_API_URL !== "https://api.menta.global/api"
+  ) {
+    throw new Error(
+      "URL de MENTA no autorizada en integración."
+    );
+  }
+
+  if (
     (options.method || "GET") !== "GET" ||
     options.body !== undefined
   ) {
@@ -194,6 +213,7 @@ function validateMentaIntegrationRequest(
   if (
     pathname !== "/v2/transaction-reports" ||
     !query ||
+    path.includes("#") ||
     path.split("?").length !== 2
   ) {
     throw new Error(
@@ -218,6 +238,14 @@ function validateMentaIntegrationRequest(
     ) {
       throw new Error(
         "Parámetros MENTA no autorizados en integración."
+      );
+    }
+  }
+
+  for (const key of allowedParams) {
+    if (!params.get(key)?.trim()) {
+      throw new Error(
+        "Faltan parámetros obligatorios de MENTA."
       );
     }
   }
@@ -265,6 +293,11 @@ export async function mentaRequest<T>(
   }
 
   if (!result.response.ok) {
+        if (isPosIntegrationEnvironment()) {
+      throw new Error(
+        `MENTA respondió ${result.response.status}.`
+      );
+    }
     throw new Error(
       `MENTA respondió ${result.response.status}: ${JSON.stringify(
         result.data
