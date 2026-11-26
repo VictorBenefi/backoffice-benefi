@@ -4,6 +4,8 @@ import "server-only";
 import { mentaRequest } from "@/lib/menta/client";
 import {
   getPosShiftDataSource,
+  MENTA_TEST_MERCHANT_ID,
+  MENTA_TEST_TERMINAL_ID,
 } from "@/lib/pos/shift-data-source";
 
 import {
@@ -103,6 +105,24 @@ export async function getMentaShiftTransactions({
   }
 
     const source = getPosShiftDataSource();
+    if (source === "MENTA_TEST") {
+  if (
+    normalizedMerchantId !== MENTA_TEST_MERCHANT_ID
+  ) {
+    throw new Error(
+      "El comercio no está autorizado para pruebas con MENTA."
+    );
+  }
+
+  if (
+    normalizedTerminalIds.size !== 1 ||
+    !normalizedTerminalIds.has(MENTA_TEST_TERMINAL_ID)
+  ) {
+    throw new Error(
+      "La terminal no está autorizada para pruebas con MENTA."
+    );
+  }
+}
 
   if (source === "SIMULATED") {
 

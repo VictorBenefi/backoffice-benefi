@@ -1,3 +1,11 @@
+import "server-only";
+
+import {
+  getPosShiftDataSource,
+  isPosIntegrationEnvironment,
+  MENTA_TEST_MERCHANT_ID,
+} from "@/lib/pos/shift-data-source";
+
 const MENTA_API_URL =
   process.env.MENTA_API_URL ||
   "https://api.menta.global/api";
@@ -158,10 +166,78 @@ const response = await fetch(
   };
 }
 
+function validateMentaIntegrationRequest(
+  path: string,
+  options: MentaRequestOptions
+): void {
+  if (!isPosIntegrationEnvironment()) {
+    return;
+  }
+
+  if (getPosShiftDataSource() !== "MENTA_TEST") {
+    throw new Error(
+      "La conexión a MENTA no está habilitada en integración."
+    );
+  }
+
+  if (
+    (options.method || "GET") !== "GET" ||
+    options.body !== undefined
+  ) {
+    throw new Error(
+      "Integración POS solo permite consultas de lectura."
+    );
+  }
+
+  const [pathname, query] = path.split("?");
+
+  if (
+    pathname !== "/v2/transaction-reports" ||
+    !query ||
+    path.split("?").length !== 2
+  ) {
+    throw new Error(
+      "Endpoint MENTA no autorizado en integración."
+    );
+  }
+
+  const params = new URLSearchParams(query);
+
+  const allowedParams = new Set([
+    "page",
+    "size",
+    "start",
+    "end",
+    "merchantId",
+  ]);
+
+  for (const key of params.keys()) {
+    if (
+      !allowedParams.has(key) ||
+      params.getAll(key).length !== 1
+    ) {
+      throw new Error(
+        "Parámetros MENTA no autorizados en integración."
+      );
+    }
+  }
+
+  if (
+    params.get("merchantId") !==
+    MENTA_TEST_MERCHANT_ID
+  ) {
+    throw new Error(
+      "Comercio MENTA no autorizado en integración."
+    );
+  }
+}
+
 export async function mentaRequest<T>(
   path: string,
   options: MentaRequestOptions = {}
 ): Promise<T> {
+  validateMentaIntegrationRequest(path, options);
+
   let accessToken =
     await getAccessToken();
 

@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  isPosIntegrationEnvironment,
+} from "@/lib/pos/shift-data-source";
 
 const allowedRoutes = new Map<string, string>([
   ["/api/pos/terminals", "GET"],
@@ -11,8 +14,7 @@ const allowedRoutes = new Map<string, string>([
 
 export function proxy(request: NextRequest) {
   const integrationOnly =
-    process.env.POS_INTEGRATION_ONLY === "true" ||
-    process.env.VERCEL_TARGET_ENV === "integration-pos";
+  isPosIntegrationEnvironment();
 
   if (!integrationOnly) {
     return NextResponse.next();
