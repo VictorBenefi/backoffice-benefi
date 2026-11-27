@@ -134,6 +134,18 @@ export async function POST(request: Request) {
       );
     }
 
+        if (
+      access.authenticatedPosId &&
+      access.authenticatedPosId !==
+        savedRequest.requested_pos_id
+    ) {
+      return errorResponse(
+        "POS_IDENTITY_MISMATCH",
+        "La solicitud pertenece a otra terminal.",
+        403
+      );
+    }
+
     // 6. Revalidar terminales de solicitudes pendientes.
 
     if (savedRequest.status === "PENDING") {

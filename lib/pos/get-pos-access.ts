@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -35,6 +36,139 @@ export class PosAccessError extends Error {
   }
 }
 
+async function getTerminalAccess(
+  request: Request,
+  credential: string
+) {
+  const merchantId =
+    request.headers.get("x-menta-merchant-id")?.trim();
+
+  const serial =
+    request.headers.get("x-pos-serial")?.trim();
+
+  const invalidAccess = () =>
+    new PosAccessError(
+      "INVALID_POS_CREDENTIAL",
+      "Terminal no autorizada.",
+      401
+    );
+
+  if (
+    !merchantId ||
+    !serial ||
+    !/^[0-9a-f]{64}$/.test(credential)
+  ) {
+    throw invalidAccess();
+  }
+
+  const credentialHash = createHash("sha256")
+    .update(credential)
+    .digest("hex");
+
+  const { data: registered, error } =
+    await supabase
+      .from("pos_api_credentials")
+      .select("id, pos_id, merchant_id, user_id")
+      .eq("credential_hash", credentialHash)
+      .eq("is_active", true)
+      .is("revoked_at", null)
+      .maybeSingle();
+
+  if (error) {
+    throw new Error(
+      "No se pudo verificar la credencial POS."
+    );
+  }
+
+  if (!registered) {
+    throw invalidAccess();
+  }
+
+  const { data: device, error: deviceError } =
+    await supabase
+      .from("pos_devices")
+      .select("id, merchant_id, serial, menta_terminal_id, status")
+      .eq("id", registered.pos_id)
+      .eq("merchant_id", registered.merchant_id)
+      .eq("serial", serial)
+      .in("status", [
+        "assigned_merchant",
+        "installed",
+      ])
+      .maybeSingle();
+
+  if (deviceError) {
+    throw new Error(
+      "No se pudo verificar la terminal."
+    );
+  }
+
+  if (!device || !device.menta_terminal_id) {
+    throw invalidAccess();
+  }
+
+  const { data: assignments, error: assignmentError } =
+    await supabase
+      .from("pos_menta_merchant_assignments")
+      .select("menta_merchant_id, valid_from, valid_to")
+      .eq("pos_id", device.id)
+      .eq("merchant_id", registered.merchant_id)
+      .eq("menta_terminal_id", device.menta_terminal_id)
+      .eq("verification_status", "verified");
+
+  if (assignmentError) {
+    throw new Error(
+      "No se pudo verificar la asociacion MENTA."
+    );
+  }
+
+  const now = Date.now();
+
+  const activeAssignments = (assignments ?? []).filter(
+    (assignment) =>
+      assignment.valid_from !== null &&
+      Date.parse(assignment.valid_from) <= now &&
+      (
+        assignment.valid_to === null ||
+        Date.parse(assignment.valid_to) > now
+      )
+  );
+
+  if (
+    activeAssignments.length !== 1 ||
+    activeAssignments[0].menta_merchant_id !== merchantId
+  ) {
+    throw invalidAccess();
+  }
+
+  const { data: appUser, error: userError } =
+    await supabase
+      .from("app_users")
+      .select("id, name, role, is_active")
+      .eq("id", registered.user_id)
+      .eq("role", "pos_terminal")
+      .eq("is_active", true)
+      .is("auth_user_id", null)
+      .maybeSingle();
+
+  if (userError) {
+    throw new Error(
+      "No se pudo verificar la identidad POS."
+    );
+  }
+
+  if (!appUser) {
+    throw invalidAccess();
+  }
+
+  return {
+    user: appUser,
+    fullMerchantIds: [registered.merchant_id],
+    allowedBranchIds: [] as string[],
+    authenticatedPosId: device.id as string | null,
+  };
+}
+
 export async function getPosAccess(request: Request) {
       if (
     process.env.NODE_ENV === "production" &&
@@ -64,6 +198,12 @@ export async function getPosAccess(request: Request) {
   }
 
   const token = match[1];
+    if (token.startsWith("pos_")) {
+    return getTerminalAccess(
+      request,
+      token.slice(4)
+    );
+  }
 
   // 2. Validar usuario en Supabase Auth.
 
@@ -248,6 +388,8 @@ export async function getPosAccess(request: Request) {
 
     allowedBranchIds:
       Array.from(allowedBranchIds),
+
+    authenticatedPosId: null as string | null,
   };
 }
 

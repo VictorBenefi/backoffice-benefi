@@ -131,9 +131,20 @@ export async function POST(request: Request) {
       )
     );
 
-    // 4. Validar terminales autorizadas.
+        // 4. Validar terminales autorizadas.
 
-    const authorizedTerminals =
+      if (
+        access.authenticatedPosId &&
+        access.authenticatedPosId !== requestedPosId
+      ) {
+        return errorResponse(
+          "POS_IDENTITY_MISMATCH",
+          "La terminal solicitante no coincide con la terminal autenticada.",
+          403
+        );
+      }
+
+      const authorizedTerminals =
       await getAuthorizedPosTerminals(
         access,
         merchantId
